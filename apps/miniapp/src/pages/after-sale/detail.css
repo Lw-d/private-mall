@@ -1,0 +1,307 @@
+.after-sale-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.after-sale-status-card {
+  padding: 30px;
+  background: #0f766e;
+  border-radius: 12px;
+  color: #ffffff;
+}
+
+.after-sale-status-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.after-sale-status,
+.after-sale-status-copy,
+.after-sale-section-title,
+.after-sale-info-label,
+.after-sale-info-value,
+.after-sale-payable,
+.after-sale-form-label,
+.after-sale-log-title,
+.after-sale-log-time,
+.after-sale-log-copy,
+.after-sale-empty-title,
+.after-sale-empty-copy {
+  display: block;
+}
+
+.after-sale-status {
+  min-width: 0;
+  font-size: 40px;
+  font-weight: 800;
+}
+
+.after-sale-status-copy {
+  margin-top: 12px;
+  font-size: 26px;
+  line-height: 1.45;
+  opacity: 0.9;
+}
+
+.after-sale-refresh-button {
+  width: 116px;
+  height: 58px;
+  margin: 0;
+  background: #f1f5f9;
+  border-radius: 8px;
+  color: #0f766e;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.after-sale-refresh-button.light {
+  width: 132px;
+  height: 60px;
+  background: rgb(255 255 255 / 16%);
+  border: 1px solid rgb(255 255 255 / 40%);
+  color: #ffffff;
+}
+
+.after-sale-action-bar {
+  display: flex;
+  padding: 20px;
+  justify-content: flex-end;
+  gap: 14px;
+  background: #ffffff;
+  border: 1px solid #eef2f6;
+  border-radius: 12px;
+}
+
+.after-sale-secondary-button {
+  width: 188px;
+  height: 72px;
+  margin: 0;
+  background: #ffffff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  color: #475467;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.after-sale-secondary-button.danger {
+  color: #dc2626;
+}
+
+.after-sale-section {
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid #eef2f6;
+  border-radius: 12px;
+}
+
+.after-sale-section-title {
+  margin-bottom: 18px;
+  color: #111827;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.after-sale-info-row {
+  display: flex;
+  padding: 14px 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.after-sale-info-row:last-child {
+  border-bottom: 0;
+}
+
+.after-sale-info-label {
+  flex-shrink: 0;
+  color: #667085;
+  font-size: 24px;
+}
+
+.after-sale-info-value,
+.after-sale-payable {
+  min-width: 0;
+  color: #111827;
+  font-size: 24px;
+  line-height: 1.45;
+  text-align: right;
+  word-break: break-all;
+}
+
+.after-sale-payable {
+  color: #dc2626;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.after-sale-form-field {
+  margin-bottom: 18px;
+}
+
+.after-sale-form-label {
+  margin-bottom: 10px;
+  color: #475467;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.after-sale-input {
+  box-sizing: border-box;
+  height: 76px;
+  padding: 0 20px;
+  background: #f8fafc;
+  border: 1px solid #e7edf3;
+  border-radius: 8px;
+  color: #111827;
+  font-size: 26px;
+}
+
+.after-sale-submit-button {
+  width: 220px;
+  height: 72px;
+  margin: 8px 0 0;
+  background: #0f766e;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.after-sale-log-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.after-sale-log-item {
+  position: relative;
+  display: flex;
+  min-height: 92px;
+  gap: 18px;
+}
+
+.after-sale-log-item::before {
+  position: absolute;
+  top: 20px;
+  bottom: 0;
+  left: 9px;
+  width: 2px;
+  background: #dbe8e4;
+  content: '';
+}
+
+.after-sale-log-item:last-child::before {
+  display: none;
+}
+
+.after-sale-log-dot {
+  position: relative;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-top: 4px;
+  background: #0f766e;
+  border: 4px solid #dff5ef;
+  border-radius: 50%;
+}
+
+.after-sale-log-body {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 22px;
+}
+
+.after-sale-log-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.after-sale-log-title {
+  color: #111827;
+  font-size: 25px;
+  font-weight: 800;
+}
+
+.after-sale-log-time {
+  flex-shrink: 0;
+  color: #98a2b3;
+  font-size: 21px;
+}
+
+.after-sale-log-copy {
+  margin-top: 8px;
+  color: #475467;
+  font-size: 24px;
+  line-height: 1.45;
+}
+
+.after-sale-placeholder {
+  display: flex;
+  min-height: 116px;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border-radius: 10px;
+  color: #667085;
+  font-size: 26px;
+}
+
+.after-sale-footer-actions {
+  padding-bottom: 16px;
+}
+
+.after-sale-back-button,
+.after-sale-primary-button {
+  height: 76px;
+  margin: 0;
+  border-radius: 8px;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.after-sale-back-button {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #d0d5dd;
+  color: #475467;
+}
+
+.after-sale-primary-button {
+  width: 220px;
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.after-sale-empty {
+  display: flex;
+  min-height: calc(100vh - 48px);
+  padding: 48px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #eef2f6;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.after-sale-empty-title {
+  color: #111827;
+  font-size: 38px;
+  font-weight: 700;
+}
+
+.after-sale-empty-copy {
+  margin-top: 16px;
+  color: #667085;
+  font-size: 26px;
+  line-height: 1.5;
+}

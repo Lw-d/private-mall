@@ -1,0 +1,12 @@
+ALTER TABLE `point_ledgers`
+  MODIFY `type` ENUM(
+    'ORDER_EARN',
+    'ORDER_REFUND_DEDUCT',
+    'ORDER_REDEEM',
+    'ORDER_REDEEM_REFUND',
+    'ADJUSTMENT'
+  ) NOT NULL;
+
+ALTER TABLE `orders`
+  ADD COLUMN `pointsUsed` INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN `pointsDiscountAmount` DECIMAL(10, 2) NOT NULL DEFAULT 0;

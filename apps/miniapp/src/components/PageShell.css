@@ -1,0 +1,8 @@
+.page-shell {
+  display: flex;
+  min-height: 100vh;
+  padding: 24px;
+  flex-direction: column;
+  gap: 24px;
+  background: #f6f7f9;
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@mall/api-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/runtime.js",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "echo \"TODO: configure api-sdk lint\"",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"TODO: add api-sdk tests\""
+  },
+  "dependencies": {
+    "@mall/shared-types": "workspace:*"
+  }
+}

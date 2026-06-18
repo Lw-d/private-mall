@@ -1,0 +1,14 @@
+{
+  "name": "@mall/shared-utils",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "echo \"TODO: configure shared-utils lint\"",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"TODO: add shared-utils tests\""
+  }
+}

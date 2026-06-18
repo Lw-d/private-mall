@@ -1,0 +1,32 @@
+{
+  "name": "private-mall",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Private-domain miniapp mall monorepo.",
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=20.19.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "db:down": "docker compose -f docker/docker-compose.dev.yml down",
+    "db:init": "pnpm db:up && pnpm --filter @mall/server prisma:generate && pnpm --filter @mall/server prisma:migrate:deploy && pnpm db:seed",
+    "db:seed": "pnpm --filter @mall/server db:seed",
+    "db:up": "docker compose -f docker/docker-compose.dev.yml up -d",
+    "deployment:preflight": "pnpm --filter @mall/server deployment:preflight",
+    "dev": "pnpm -r --parallel --if-present dev",
+    "lint": "pnpm -r --if-present lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "integration:check": "pnpm --filter @mall/server integration:check",
+    "integration:record": "pnpm --filter @mall/server integration:record",
+    "smoke:transaction": "pnpm --filter @mall/server smoke:transaction",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,508 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider          = "mysql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ProductStatus {
+  DRAFT
+  ON_SALE
+  OFF_SALE
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PENDING_DELIVERY
+  SHIPPED
+  COMPLETED
+  CANCELLED
+  REFUNDING
+  REFUNDED
+}
+
+enum PaymentChannel {
+  WECHAT
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CLOSED
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum RefundFailureSource {
+  ADMIN_REJECT
+  WECHAT_REQUEST
+  WECHAT_NOTIFY
+}
+
+enum AfterSaleType {
+  REFUND_ONLY
+  RETURN_REFUND
+}
+
+enum AfterSaleStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  WAIT_BUYER_RETURN
+  BUYER_RETURNED
+  MERCHANT_RECEIVED
+  REFUNDING
+  COMPLETED
+  CANCELLED
+}
+
+enum AfterSaleActorType {
+  USER
+  ADMIN
+  SYSTEM
+}
+
+enum CouponType {
+  FIXED_AMOUNT
+}
+
+enum CouponStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  EXPIRED
+}
+
+enum UserCouponStatus {
+  AVAILABLE
+  LOCKED
+  USED
+  EXPIRED
+  VOID
+}
+
+enum PointLedgerType {
+  ORDER_EARN
+  ORDER_REFUND_DEDUCT
+  ORDER_REDEEM
+  ORDER_REDEEM_REFUND
+  ADJUSTMENT
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  OPERATOR
+}
+
+enum AdminStatus {
+  ACTIVE
+  DISABLED
+}
+
+model Admin {
+  id           String      @id @default(cuid())
+  username     String      @unique
+  passwordHash String
+  nickname     String?
+  role         AdminRole   @default(OPERATOR)
+  status       AdminStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([status])
+  @@map("admins")
+}
+
+model User {
+  id            String        @id @default(cuid())
+  openId        String        @unique
+  unionId       String?
+  nickname      String?
+  avatarUrl     String?
+  phone         String?
+  status        UserStatus    @default(ACTIVE)
+  memberLevel   Int           @default(1)
+  growthValue   Int           @default(0)
+  pointsBalance Int           @default(0)
+  lastLoginAt   DateTime?
+  orders        Order[]
+  addresses     UserAddress[]
+  coupons       UserCoupon[]
+  afterSales    AfterSale[]
+  pointLedgers  PointLedger[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("users")
+}
+
+model UserAddress {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  receiverName  String
+  receiverPhone String
+  province      String
+  city          String
+  district      String
+  detailAddress String
+  postalCode    String?
+  isDefault     Boolean  @default(false)
+  orders        Order[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, isDefault])
+  @@map("user_addresses")
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String
+  parentId    String?
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryTree")
+  level       Int        @default(1)
+  path        String
+  sort        Int        @default(0)
+  isVisible   Boolean    @default(true)
+  description String?
+  products    Product[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([parentId])
+  @@index([path])
+  @@map("categories")
+}
+
+model Product {
+  id          String         @id @default(cuid())
+  categoryId  String
+  category    Category       @relation(fields: [categoryId], references: [id])
+  name        String
+  subtitle    String?
+  description String?        @db.Text
+  status      ProductStatus  @default(DRAFT)
+  salesCount  Int            @default(0)
+  sort        Int            @default(0)
+  skus        ProductSku[]
+  images      ProductImage[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([categoryId])
+  @@index([status])
+  @@index([name])
+  @@map("products")
+}
+
+model ProductSku {
+  id          String      @id @default(cuid())
+  productId   String
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  skuCode     String?     @unique
+  name        String
+  specs       Json?
+  price       Decimal     @db.Decimal(10, 2)
+  originPrice Decimal?    @db.Decimal(10, 2)
+  stock       Int         @default(0)
+  isActive    Boolean     @default(true)
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([productId])
+  @@map("product_skus")
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  sort      Int      @default(0)
+  isMain    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+model Order {
+  id                    String                @id @default(cuid())
+  orderNo               String                @unique
+  userId                String
+  user                  User                  @relation(fields: [userId], references: [id])
+  status                OrderStatus           @default(PENDING_PAYMENT)
+  totalAmount           Decimal               @db.Decimal(10, 2)
+  payableAmount         Decimal               @db.Decimal(10, 2)
+  discountAmount        Decimal               @default(0) @db.Decimal(10, 2)
+  pointsUsed            Int                   @default(0)
+  pointsDiscountAmount  Decimal               @default(0) @db.Decimal(10, 2)
+  userCouponId          String?
+  couponId              String?
+  couponCode            String?
+  couponName            String?
+  couponDiscountAmount  Decimal?              @db.Decimal(10, 2)
+  shippingAddressId     String?
+  shippingAddress       UserAddress?          @relation(fields: [shippingAddressId], references: [id], onDelete: SetNull)
+  receiverName          String?
+  receiverPhone         String?
+  receiverProvince      String?
+  receiverCity          String?
+  receiverDistrict      String?
+  receiverDetailAddress String?
+  receiverPostalCode    String?
+  totalQuantity         Int
+  remark                String?
+  cancelledAt           DateTime?
+  cancelReason          String?
+  paidAt                DateTime?
+  shippedAt             DateTime?
+  completedAt           DateTime?
+  logisticsCompany      String?
+  trackingNo            String?
+  deliveryRemark        String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  items                 OrderItem[]
+  payments              Payment[]
+  refunds               Refund[]
+  afterSales            AfterSale[]
+  userCoupon            UserCoupon?
+  pointLedgers          PointLedger[]
+  logisticsTraces       OrderLogisticsTrace[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([userCouponId])
+  @@index([shippingAddressId])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderLogisticsTrace {
+  id               String   @id @default(cuid())
+  orderId          String
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status           String
+  content          String
+  logisticsCompany String?
+  trackingNo       String?
+  occurredAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  @@index([orderId])
+  @@index([occurredAt])
+  @@map("order_logistics_traces")
+}
+
+model OrderItem {
+  id              String     @id @default(cuid())
+  orderId         String
+  order           Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  skuId           String
+  sku             ProductSku @relation(fields: [skuId], references: [id])
+  productName     String
+  skuName         String
+  skuSpecs        Json?
+  productImageUrl String?
+  unitPrice       Decimal    @db.Decimal(10, 2)
+  quantity        Int
+  totalAmount     Decimal    @db.Decimal(10, 2)
+  createdAt       DateTime   @default(now())
+
+  @@index([orderId])
+  @@index([skuId])
+  @@map("order_items")
+}
+
+model Payment {
+  id            String         @id @default(cuid())
+  paymentNo     String         @unique
+  orderId       String
+  order         Order          @relation(fields: [orderId], references: [id])
+  channel       PaymentChannel @default(WECHAT)
+  status        PaymentStatus  @default(PENDING)
+  amount        Decimal        @db.Decimal(10, 2)
+  transactionId String?        @unique
+  prepayId      String?
+  paidAt        DateTime?
+  notifyPayload Json?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+  @@map("payments")
+}
+
+model Refund {
+  id            String               @id @default(cuid())
+  refundNo      String               @unique
+  orderId       String
+  order         Order                @relation(fields: [orderId], references: [id])
+  paymentId     String?
+  amount        Decimal              @db.Decimal(10, 2)
+  reason        String?
+  status        RefundStatus         @default(PENDING)
+  failureSource RefundFailureSource?
+  failureReason String?
+  transactionId String?
+  notifyPayload Json?
+  afterSale     AfterSale?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([orderId])
+  @@index([paymentId])
+  @@index([status])
+  @@index([failureSource])
+  @@map("refunds")
+}
+
+model AfterSale {
+  id                String          @id @default(cuid())
+  afterSaleNo       String          @unique
+  orderId           String
+  order             Order           @relation(fields: [orderId], references: [id])
+  userId            String
+  user              User            @relation(fields: [userId], references: [id])
+  type              AfterSaleType
+  status            AfterSaleStatus @default(REQUESTED)
+  reason            String
+  description       String?         @db.Text
+  evidenceImageUrls Json?
+  requestedAmount   Decimal         @db.Decimal(10, 2)
+  approvedAmount    Decimal?        @db.Decimal(10, 2)
+  rejectReason      String?
+  merchantRemark    String?
+  returnLogisticsCompany String?
+  returnTrackingNo   String?
+  returnRemark       String?
+  refundId          String?         @unique
+  refund            Refund?         @relation(fields: [refundId], references: [id], onDelete: SetNull)
+  approvedAt        DateTime?
+  buyerReturnedAt   DateTime?
+  merchantReceivedAt DateTime?
+  rejectedAt        DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  logs              AfterSaleLog[]
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([orderId])
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@map("after_sales")
+}
+
+model AfterSaleLog {
+  id          String             @id @default(cuid())
+  afterSaleId String
+  afterSale   AfterSale          @relation(fields: [afterSaleId], references: [id], onDelete: Cascade)
+  actorType   AfterSaleActorType
+  actorId     String?
+  action      String
+  content     String?
+  createdAt   DateTime           @default(now())
+
+  @@index([afterSaleId])
+  @@index([actorType])
+  @@index([createdAt])
+  @@map("after_sale_logs")
+}
+
+model Coupon {
+  id              String       @id @default(cuid())
+  name            String
+  code            String       @unique
+  type            CouponType   @default(FIXED_AMOUNT)
+  thresholdAmount Decimal      @db.Decimal(10, 2)
+  discountAmount  Decimal      @db.Decimal(10, 2)
+  totalStock      Int
+  claimedCount    Int          @default(0)
+  usedCount       Int          @default(0)
+  perUserLimit    Int          @default(1)
+  validFrom       DateTime
+  validTo         DateTime
+  status          CouponStatus @default(DRAFT)
+  description     String?
+  userCoupons     UserCoupon[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([status])
+  @@index([validFrom])
+  @@index([validTo])
+  @@map("coupons")
+}
+
+model UserCoupon {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  couponId  String
+  coupon    Coupon           @relation(fields: [couponId], references: [id])
+  status    UserCouponStatus @default(AVAILABLE)
+  claimedAt DateTime         @default(now())
+  usedAt    DateTime?
+  lockedAt  DateTime?
+  orderId   String?          @unique
+  order     Order?           @relation(fields: [orderId], references: [id])
+
+  @@index([userId])
+  @@index([couponId])
+  @@index([status])
+  @@map("user_coupons")
+}
+
+model PointLedger {
+  id           String          @id @default(cuid())
+  userId       String
+  user         User            @relation(fields: [userId], references: [id])
+  orderId      String?
+  order        Order?          @relation(fields: [orderId], references: [id])
+  type         PointLedgerType
+  points       Int
+  balanceAfter Int
+  description  String?
+  createdAt    DateTime        @default(now())
+
+  @@unique([orderId, type])
+  @@index([userId, createdAt])
+  @@index([type])
+  @@map("point_ledgers")
+}
+
+model PointRedeemRule {
+  id            String   @id @default("default")
+  enabled       Boolean  @default(true)
+  pointsPerYuan Int      @default(100)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("point_redeem_rules")
+}

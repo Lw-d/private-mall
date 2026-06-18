@@ -1,0 +1,9 @@
+CREATE TABLE `point_redeem_rules` (
+  `id` VARCHAR(191) NOT NULL DEFAULT 'default',
+  `enabled` BOOLEAN NOT NULL DEFAULT true,
+  `pointsPerYuan` INTEGER NOT NULL DEFAULT 100,
+  `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updatedAt` DATETIME(3) NOT NULL,
+
+  PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

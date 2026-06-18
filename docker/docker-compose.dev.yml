@@ -1,0 +1,32 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: private-mall-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: mall_system
+      MYSQL_USER: mall
+      MYSQL_PASSWORD: mall_password
+      MYSQL_ROOT_PASSWORD: root_password
+      TZ: Asia/Shanghai
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: private-mall-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  mysql_data:
+  redis_data:

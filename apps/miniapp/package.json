@@ -1,0 +1,40 @@
+{
+  "name": "@mall/miniapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "taro build --type weapp",
+    "build:weapp": "taro build --type weapp",
+    "dev": "pnpm dev:weapp",
+    "dev:weapp": "taro build --type weapp --watch",
+    "lint": "echo \"TODO: configure miniapp lint\"",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"TODO: add miniapp tests\""
+  },
+  "dependencies": {
+    "@mall/api-sdk": "workspace:*",
+    "@mall/shared-types": "workspace:*",
+    "@mall/shared-utils": "workspace:*",
+    "@taroify/core": "^0.9.2",
+    "@tarojs/components": "^4.2.0",
+    "@tarojs/plugin-framework-react": "^4.2.0",
+    "@tarojs/plugin-platform-weapp": "^4.2.0",
+    "@tarojs/react": "^4.2.0",
+    "@tarojs/runtime": "^4.2.0",
+    "@tarojs/shared": "^4.2.0",
+    "@tarojs/taro": "^4.2.0",
+    "@tarojs/webpack5-runner": "^4.2.0",
+    "babel-preset-taro": "^4.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.13"
+  },
+  "devDependencies": {
+    "@babel/preset-react": "^7.28.5",
+    "@tarojs/cli": "^4.2.0",
+    "@types/node": "^25.9.0",
+    "@types/react": "^18.3.27",
+    "@types/react-dom": "^18.3.7"
+  }
+}

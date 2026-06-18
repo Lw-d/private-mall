@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+coverage
+.turbo
+.next
+.cache
+.env
+.env.local
+pnpm-debug.log*
+
+apps/server/dist
+apps/server/src/generated/prisma
+apps/server/uploads
+uploads

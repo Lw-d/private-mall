@@ -1,0 +1,20 @@
+{
+  "appid": "touristappid",
+  "compileType": "miniprogram",
+  "description": "Private-domain miniapp mall.",
+  "miniprogramRoot": "dist/",
+  "projectname": "mall-miniapp",
+  "setting": {
+    "babelSetting": {
+      "ignore": [],
+      "outputPath": ""
+    },
+    "checkSiteMap": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "preloadBackgroundData": false,
+    "urlCheck": false,
+    "minifyWXML": true
+  }
+}

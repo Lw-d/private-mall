@@ -1,0 +1,220 @@
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: #f5f7fb;
+  color: #1f2937;
+}
+
+.admin-shell {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.admin-sider {
+  height: 100vh;
+  overflow: auto;
+  background: #ffffff !important;
+  border-right: 1px solid #edf0f5;
+}
+
+.admin-main {
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.brand {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  height: 56px;
+  padding: 0 20px;
+  background: #ffffff;
+  font-weight: 700;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.admin-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex: 0 0 56px;
+  align-items: center;
+  justify-content: space-between;
+  height: 56px;
+  padding: 0 20px;
+  background: #ffffff;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.admin-content {
+  height: calc(100vh - 56px);
+  overflow: auto;
+  padding: 20px;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1280px;
+}
+
+.page-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title h4,
+.page-title h5 {
+  margin: 0;
+}
+
+.toolbar {
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #edf0f5;
+  border-radius: 6px;
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: start;
+}
+
+.side-panel {
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #edf0f5;
+  border-radius: 6px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.breakable-text {
+  word-break: break-all;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.product-form {
+  margin-top: 8px;
+}
+
+.sku-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 110px 110px 110px 1.3fr 72px 40px;
+  gap: 8px;
+  align-items: end;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #edf0f5;
+  border-radius: 6px;
+}
+
+.sku-row .ant-form-item {
+  margin-bottom: 0;
+}
+
+.status-select,
+.after-sale-status-select,
+.order-status-select,
+.order-search,
+.user-search,
+.coupon-search {
+  min-width: 160px;
+}
+
+.coupon-search,
+.after-sale-search,
+.order-search {
+  width: 260px;
+}
+
+.coupon-form {
+  margin-top: 8px;
+}
+
+.coupon-number-input {
+  width: 180px;
+}
+
+.login-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background: #f5f7fb;
+}
+
+.login-card {
+  width: min(100%, 360px);
+}
+
+.login-stack {
+  width: 100%;
+  text-align: center;
+}
+
+.login-form {
+  width: 100%;
+  text-align: left;
+}
+
+.ship-order-summary {
+  margin-bottom: 16px;
+}
+
+.logistics-trace-header {
+  justify-content: space-between;
+}
+
+.section-subtitle {
+  margin-bottom: 0 !important;
+}
+
+.login-mark {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto;
+  color: #1677ff;
+  place-items: center;
+  background: #e6f4ff;
+  border-radius: 6px;
+}
+
+@media (max-width: 900px) {
+  .two-column {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-content {
+    padding: 12px;
+  }
+
+  .form-grid,
+  .sku-row {
+    grid-template-columns: 1fr;
+  }
+}
