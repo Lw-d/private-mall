@@ -7,6 +7,7 @@ export const {
   createAfterSale,
   createOrderFromCart,
   fetchAfterSaleDetail,
+  fetchAfterSaleSummary,
   fetchAfterSales,
   fetchOrderDetail,
   fetchOrders,

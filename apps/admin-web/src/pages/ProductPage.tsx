@@ -8,7 +8,6 @@ import {
   Table,
   Tag,
   Typography,
-  message,
 } from 'antd';
 import type { ChangeEvent } from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -23,6 +22,7 @@ import {
 } from '../api/adminApi';
 import { showApiError } from '../api/error';
 import { Category, Product, ProductInput, ProductStatus } from '../api/types';
+import { appMessage } from '../utils/appMessage';
 import { ProductFormModal } from './ProductFormModal';
 
 const statusOptions: { value: ProductStatus; label: string }[] = [
@@ -95,10 +95,10 @@ export function ProductPage() {
   const handleSubmit = async (input: ProductInput) => {
     if (editingProduct) {
       await updateProduct(editingProduct.id, input);
-      message.success('商品已更新');
+      appMessage.success('商品已更新');
     } else {
       await createProduct(input);
-      message.success('商品已创建');
+      appMessage.success('商品已创建');
     }
 
     setModalOpen(false);
@@ -109,7 +109,7 @@ export function ProductPage() {
   const toggleProductStatus = async (product: Product) => {
     try {
       await updateProductStatus(product.id, product.status === 'ON_SALE' ? 'OFF_SALE' : 'ON_SALE');
-      message.success(product.status === 'ON_SALE' ? '商品已下架' : '商品已上架');
+      appMessage.success(product.status === 'ON_SALE' ? '商品已下架' : '商品已上架');
       await load();
     } catch (error) {
       showApiError(error, '状态更新失败');
@@ -119,7 +119,7 @@ export function ProductPage() {
   const handleDelete = async (product: Product) => {
     try {
       await deleteProduct(product.id);
-      message.success('商品已删除');
+      appMessage.success('商品已删除');
       await load();
     } catch (error) {
       showApiError(error, '删除失败');
@@ -253,10 +253,6 @@ export function ProductPage() {
 
   return (
     <section className="page">
-      <div className="page-title">
-        <Typography.Title level={4}>商品管理</Typography.Title>
-        <Typography.Text type="secondary">查看商品、SKU、库存和上下架状态。</Typography.Text>
-      </div>
       <Space className="toolbar" wrap>
         <Input.Search
           placeholder="搜索商品"
@@ -280,12 +276,14 @@ export function ProductPage() {
         </Button>
       </Space>
       <Table
+        className="page-table"
         rowKey="id"
         loading={loading}
         columns={columns}
         dataSource={products}
         expandable={{ expandedRowRender }}
         pagination={false}
+        scroll={{ x: 'max-content', y: '100%' }}
       />
       <ProductFormModal
         categories={categories}

@@ -11,7 +11,6 @@ import {
   Table,
   Tag,
   Typography,
-  message,
 } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import type { ChangeEvent } from 'react';
@@ -20,6 +19,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createCoupon, fetchCoupons, updateCoupon, updateCouponStatus } from '../api/adminApi';
 import { showApiError } from '../api/error';
 import { Coupon, CouponInput, CouponStatus } from '../api/types';
+import { appMessage } from '../utils/appMessage';
 
 const statusOptions: { value: CouponStatus; label: string }[] = [
   { value: 'DRAFT', label: '草稿' },
@@ -136,10 +136,10 @@ export function CouponPage() {
     try {
       if (editingCoupon) {
         await updateCoupon(editingCoupon.id, toCouponInput(values));
-        message.success('优惠券已更新');
+        appMessage.success('优惠券已更新');
       } else {
         await createCoupon(toCouponInput(values));
-        message.success('优惠券已创建');
+        appMessage.success('优惠券已创建');
       }
 
       closeModal();
@@ -156,7 +156,7 @@ export function CouponPage() {
 
     try {
       await updateCouponStatus(coupon.id, nextStatus);
-      message.success(nextStatus === 'ACTIVE' ? '优惠券已上架' : '优惠券已下架');
+      appMessage.success(nextStatus === 'ACTIVE' ? '优惠券已上架' : '优惠券已下架');
       await load();
     } catch (error) {
       showApiError(error, '状态更新失败');
@@ -231,10 +231,6 @@ export function CouponPage() {
 
   return (
     <section className="page">
-      <div className="page-title">
-        <Typography.Title level={4}>优惠券管理</Typography.Title>
-        <Typography.Text type="secondary">配置满减券，查看领取和使用数据。</Typography.Text>
-      </div>
       <Space className="toolbar" wrap>
         <Input.Search
           allowClear
@@ -259,7 +255,14 @@ export function CouponPage() {
           新增优惠券
         </Button>
       </Space>
-      <Table rowKey="id" loading={loading} columns={columns} dataSource={coupons} />
+      <Table
+        className="page-table"
+        rowKey="id"
+        loading={loading}
+        columns={columns}
+        dataSource={coupons}
+        scroll={{ x: 'max-content', y: '100%' }}
+      />
       <Modal
         title={editingCoupon ? '编辑优惠券' : '新增优惠券'}
         open={modalOpen}

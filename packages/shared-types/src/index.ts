@@ -156,6 +156,26 @@ export interface Product {
   updatedAt?: string;
 }
 
+export interface HomeBanner {
+  id: ID;
+  productId: ID;
+  sort: number;
+  isActive: boolean;
+  product: Product;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface HomeBannerInput {
+  productId: ID;
+  sort: number;
+  isActive?: boolean;
+}
+
+export interface UpdateHomeBannersInput {
+  items: HomeBannerInput[];
+}
+
 export interface UserProfile {
   id: ID;
   openId: string;
@@ -651,6 +671,16 @@ export interface AfterSaleListResult {
   pageSize: number;
 }
 
+export interface AfterSaleStatusCount {
+  status: AfterSaleStatus;
+  count: number;
+}
+
+export interface AfterSaleSummary {
+  total: number;
+  statusCounts: AfterSaleStatusCount[];
+}
+
 export interface CreateAfterSaleInput {
   orderId: ID;
   type: AfterSaleType;
@@ -666,6 +696,11 @@ export interface UserAfterSaleQuery {
   type?: AfterSaleType;
   page?: number;
   pageSize?: number;
+}
+
+export interface UserAfterSaleSummaryQuery {
+  orderId?: ID;
+  type?: AfterSaleType;
 }
 
 export interface AdminAfterSaleQuery extends UserAfterSaleQuery {

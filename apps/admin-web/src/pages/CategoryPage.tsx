@@ -10,13 +10,13 @@ import {
   Tree,
   TreeSelect,
   Typography,
-  message,
 } from 'antd';
 import { useEffect, useState } from 'react';
 
 import { createCategory, deleteCategory, fetchCategories, updateCategory } from '../api/adminApi';
 import { showApiError } from '../api/error';
 import { Category } from '../api/types';
+import { appMessage } from '../utils/appMessage';
 
 function toTreeData(
   categories: Category[],
@@ -119,10 +119,10 @@ export function CategoryPage() {
           ...values,
           parentId: values.parentId ?? null,
         });
-        message.success('分类已更新');
+        appMessage.success('分类已更新');
       } else {
         await createCategory(values);
-        message.success('分类已创建');
+        appMessage.success('分类已创建');
       }
 
       resetForm();
@@ -137,7 +137,7 @@ export function CategoryPage() {
 
     try {
       await deleteCategory(editingCategory.id);
-      message.success('分类已删除');
+      appMessage.success('分类已删除');
       resetForm();
       await load();
     } catch (error) {
@@ -155,10 +155,6 @@ export function CategoryPage() {
   return (
     <section className="page two-column">
       <div>
-        <div className="page-title">
-          <Typography.Title level={4}>分类管理</Typography.Title>
-          <Typography.Text type="secondary">维护小程序分类树。</Typography.Text>
-        </div>
         <Spin spinning={loading}>
           <Tree
             blockNode

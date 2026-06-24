@@ -72,6 +72,49 @@ class EnvironmentVariables {
   @IsInt()
   @Min(1)
   POINTS_REDEEM_POINTS_PER_YUAN?: number;
+
+  @IsOptional()
+  @IsIn(['mock', 'http-json'])
+  LOGISTICS_PROVIDER?: string;
+
+  @ValidateIf((env: EnvironmentVariables) => env.LOGISTICS_PROVIDER === 'http-json')
+  @IsString()
+  @IsNotEmpty()
+  LOGISTICS_HTTP_QUERY_URL?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  LOGISTICS_HTTP_AUTH_TOKEN?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  LOGISTICS_HTTP_SIGNING_SECRET?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1000)
+  LOGISTICS_HTTP_TIMEOUT_MS?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  LOGISTICS_HTTP_RETRY_ATTEMPTS?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  LOGISTICS_HTTP_RETRY_DELAY_MS?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  LOGISTICS_REFRESH_COOLDOWN_SECONDS?: number;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

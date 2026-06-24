@@ -128,6 +128,34 @@ apps/miniapp/dist
 
 ## Smoke 回归
 
+### 后台物流刷新冷却
+
+商家后台订单页“刷新物流”按钮默认有 60 秒本地冷却，避免重复点击。需要本地快速连续复验时，可在启动后台前设置：
+
+```bash
+VITE_LOGISTICS_REFRESH_COOLDOWN_SECONDS=0 pnpm --filter @mall/admin-web dev
+```
+
+服务端 `LOGISTICS_PROVIDER=mock` 且未显式配置 `LOGISTICS_REFRESH_COOLDOWN_SECONDS` 时，不启用服务端刷新冷却，保证交易 smoke 可以连续刷新两次验证幂等。
+
+### 物流 Provider Smoke
+
+`http-json` 物流 provider 可以先用本地 fake endpoint 验证标准 JSON 契约，不需要启动数据库或 API：
+
+```bash
+pnpm smoke:logistics-provider
+```
+
+该脚本会启动临时 HTTP 服务并验证：
+
+- provider 使用 `POST application/json` 请求配置的查询地址
+- 可选 Bearer Token 会写入 `Authorization`
+- 请求体包含物流公司、物流公司编码、物流单号、收货手机号后四位、订单号和售后单号
+- 标准响应会被归一化为内部物流状态和轨迹
+- 非 2xx、非法状态、空轨迹和缺少查询地址会按失败处理
+
+### 交易闭环 Smoke
+
 API 启动后执行：
 
 ```bash
@@ -176,6 +204,8 @@ smoke 会自动验证：
 - 后台搜索订单
 - 后台发货
 - 后台发货后生成订单物流轨迹
+- 后台通过物流 provider 刷新物流轨迹，mock provider 会生成揽收和运输中轨迹
+- 重复刷新物流轨迹时保持幂等，不重复插入同一批 provider 轨迹
 - 后台订单展开行展示物流轨迹
 - 后台订单可手动追加物流轨迹，用户订单详情可见
 - 后台订单可按物流轨迹状态筛选，smoke 会用手动追加轨迹断言筛选结果
@@ -189,7 +219,17 @@ smoke 会自动验证：
 - 微信退款回调成功后返还订单积分抵扣
 - 微信退款回调后订单变为已退款并返回退款记录
 - Swagger 中用户订单分页响应文档
+- Swagger 中售后 summary 聚合接口响应文档
 - 用户侧订单分页返回结构
+- 独立创建一笔售后 smoke 订单并完成 mock 支付
+- 用户申请仅退款售后
+- 售后 summary 接口会按订单维度返回当前售后状态计数
+- 后台审核通过售后单
+- 售后 summary 状态计数同步变为已通过
+- 后台触发售后退款
+- 售后 summary 状态计数同步变为退款中
+- 微信退款回调成功后售后单进入已完成，订单进入已退款
+- 售后 summary 状态计数同步变为已完成
 
 用户侧订单分页返回结构的兼容说明见：
 

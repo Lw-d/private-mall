@@ -55,6 +55,18 @@ export class CartController {
     return this.cartService.updateChecked(user.id, skuId, dto);
   }
 
+  @Delete('items/checked')
+  @ApiWrappedOkResponse({ description: 'Remove checked cart items.', type: CartResponseDto })
+  removeCheckedItems(@CurrentUser() user: AuthenticatedUser) {
+    return this.cartService.removeCheckedCartItems(user.id);
+  }
+
+  @Delete('items')
+  @ApiWrappedOkResponse({ description: 'Clear current user cart.', type: CartResponseDto })
+  clearCart(@CurrentUser() user: AuthenticatedUser) {
+    return this.cartService.clearCart(user.id);
+  }
+
   @Delete('items/:skuId')
   @ApiWrappedOkResponse({ description: 'Remove cart item.', type: CartResponseDto })
   removeItem(@CurrentUser() user: AuthenticatedUser, @Param('skuId') skuId: string) {

@@ -101,7 +101,7 @@ export default function CategoryPage() {
           ) : products.length > 0 ? (
             <View className="category-products">
               {products.map((product) => (
-                <ProductCard compact product={product} key={product.id} />
+                <ProductCard compact product={product} key={product.id} showQuickCart />
               ))}
             </View>
           ) : (

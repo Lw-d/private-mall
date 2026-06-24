@@ -71,12 +71,6 @@ export function UserPage() {
 
   return (
     <section className="page">
-      <div className="page-title">
-        <Typography.Title level={4}>用户管理</Typography.Title>
-        <Typography.Text type="secondary">
-          查看用户资料，按昵称、OpenID 或手机号检索。
-        </Typography.Text>
-      </div>
       <Space className="toolbar" wrap>
         <Input.Search
           allowClear
@@ -91,11 +85,13 @@ export function UserPage() {
         </Button>
       </Space>
       <Table
+        className="page-table"
         rowKey="id"
         loading={loading}
         columns={columns}
         dataSource={users}
         pagination={false}
+        scroll={{ x: 'max-content', y: '100%' }}
       />
     </section>
   );

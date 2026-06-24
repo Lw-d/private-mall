@@ -26,7 +26,7 @@ export class JwtAuthGuard implements CanActivate {
     const token = this.extractBearerToken(request.headers.authorization);
 
     if (!token) {
-      throw new UnauthorizedException('Missing bearer token');
+      throw new UnauthorizedException('未登录，请先登录');
     }
 
     try {
@@ -40,7 +40,7 @@ export class JwtAuthGuard implements CanActivate {
       };
       return true;
     } catch {
-      throw new UnauthorizedException('Invalid bearer token');
+      throw new UnauthorizedException('登录已失效，请重新登录');
     }
   }
 

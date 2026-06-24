@@ -56,14 +56,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     response.status(status).json({
       code: status,
-      message: this.resolveMessage(exceptionResponse, exception),
+      message: this.resolveMessage(exceptionResponse, exception, status),
       error: this.resolveError(exceptionResponse, status),
       timestamp: new Date().toISOString(),
       path: request.originalUrl ?? request.url,
     });
   }
 
-  private resolveMessage(exceptionResponse: unknown, exception: unknown): string {
+  private resolveMessage(exceptionResponse: unknown, exception: unknown, status: number): string {
+    if (status === HttpStatus.UNAUTHORIZED && this.isDefaultUnauthorizedMessage(exceptionResponse)) {
+      return '未授权，请先登录';
+    }
+
     if (typeof exceptionResponse === 'string') {
       return exceptionResponse;
     }
@@ -83,6 +87,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     return 'Internal server error';
+  }
+
+  private isDefaultUnauthorizedMessage(exceptionResponse: unknown) {
+    if (typeof exceptionResponse === 'string') {
+      return exceptionResponse === 'Unauthorized';
+    }
+
+    return (
+      this.isExceptionResponseObject(exceptionResponse) &&
+      exceptionResponse.message === 'Unauthorized'
+    );
   }
 
   private resolveError(exceptionResponse: unknown, status: number) {

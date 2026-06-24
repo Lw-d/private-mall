@@ -58,12 +58,6 @@ export function DashboardPage() {
 
   return (
     <section className="page">
-      <div className="page-title">
-        <Typography.Title level={4}>经营概览</Typography.Title>
-        <Typography.Text type="secondary">
-          查看交易、商品、优惠券和积分的实时经营数据。
-        </Typography.Text>
-      </div>
       <Row gutter={[16, 16]}>
         <Col {...statColProps}>
           <Card loading={loading}>

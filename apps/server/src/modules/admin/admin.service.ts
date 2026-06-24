@@ -30,11 +30,11 @@ export class AdminService {
     });
 
     if (!admin || admin.status !== AdminStatus.ACTIVE) {
-      throw new UnauthorizedException('Invalid admin credentials');
+      throw new UnauthorizedException('账号或密码错误');
     }
 
     if (!this.verifyPassword(dto.password, admin.passwordHash)) {
-      throw new UnauthorizedException('Invalid admin credentials');
+      throw new UnauthorizedException('账号或密码错误');
     }
 
     const updatedAdmin = await this.prisma.admin.update({
@@ -59,7 +59,7 @@ export class AdminService {
     });
 
     if (!admin || admin.status !== AdminStatus.ACTIVE) {
-      throw new UnauthorizedException('Invalid admin token');
+      throw new UnauthorizedException('登录已失效，请重新登录');
     }
 
     return admin;

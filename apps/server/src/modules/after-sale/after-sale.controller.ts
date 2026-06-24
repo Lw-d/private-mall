@@ -7,9 +7,13 @@ import { AuthenticatedUser } from '../auth/types/authenticated-user';
 import { ApiCommonErrorResponses } from '../common/decorators/api-common-error-responses.decorator';
 import { ApiWrappedOkResponse } from '../common/decorators/api-wrapped-ok-response.decorator';
 import { AfterSaleService } from './after-sale.service';
-import { AfterSaleListResultDto, AfterSaleResponseDto } from './dto/after-sale-response.dto';
+import {
+  AfterSaleListResultDto,
+  AfterSaleResponseDto,
+  AfterSaleSummaryResponseDto,
+} from './dto/after-sale-response.dto';
 import { CreateAfterSaleDto } from './dto/create-after-sale.dto';
-import { QueryAfterSalesDto } from './dto/query-after-sales.dto';
+import { QueryAfterSalesDto, QueryAfterSaleSummaryDto } from './dto/query-after-sales.dto';
 import { SubmitReturnLogisticsDto } from './dto/review-after-sale.dto';
 
 @ApiTags('after-sales')
@@ -43,6 +47,19 @@ export class AfterSaleController {
   })
   findMany(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryAfterSalesDto) {
     return this.afterSaleService.findMany(user.id, query);
+  }
+
+  @Get('summary')
+  @ApiOperation({
+    summary: '小程序用户查询自己的售后状态计数',
+    description: '按当前用户聚合售后总数和各状态数量，支持按售后类型或订单筛选。',
+  })
+  @ApiWrappedOkResponse({
+    type: AfterSaleSummaryResponseDto,
+    description: 'Get current user after-sale status summary.',
+  })
+  getSummary(@CurrentUser() user: AuthenticatedUser, @Query() query: QueryAfterSaleSummaryDto) {
+    return this.afterSaleService.getSummary(user.id, query);
   }
 
   @Get(':id')

@@ -1,9 +1,12 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Decimal } from '@prisma/client/runtime/library';
 import {
   CouponStatus,
@@ -16,6 +19,7 @@ import {
 
 import { QueryAdminOrdersDto } from '../admin/dto/query-admin-orders.dto';
 import { CartService } from '../cart/cart.service';
+import { LogisticsService } from '../logistics/logistics.service';
 import { PointService } from '../point/point.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CancelOrderDto } from './dto/cancel-order.dto';
@@ -28,8 +32,12 @@ type ExistingOrder = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
 @Injectable()
 export class OrderService {
+  private readonly logisticsRefreshCooldownUntil = new Map<string, number>();
+
   constructor(
     private readonly cartService: CartService,
+    private readonly configService: ConfigService,
+    private readonly logisticsService: LogisticsService,
     private readonly pointService: PointService,
     private readonly prisma: PrismaService,
   ) {}
@@ -397,6 +405,83 @@ export class OrderService {
     });
   }
 
+  async refreshLogisticsTracesForAdmin(id: string) {
+    const order = await this.findExisting(id);
+
+    if (!order.shippedAt) {
+      throw new BadRequestException('Only shipped orders can refresh logistics traces');
+    }
+
+    if (!order.trackingNo) {
+      throw new BadRequestException('Tracking number is required to refresh logistics traces');
+    }
+
+    this.reserveLogisticsRefreshSlot(id);
+
+    const result = await this.logisticsService.query({
+      logisticsCompany: order.logisticsCompany,
+      trackingNo: order.trackingNo,
+      receiverPhoneTail: this.getPhoneTail(order.receiverPhone),
+      orderNo: order.orderNo,
+      shippedAt: order.shippedAt,
+    });
+
+    return this.prisma.$transaction(async (tx) => {
+      const existingTraces = await tx.orderLogisticsTrace.findMany({
+        where: { orderId: id },
+        select: {
+          status: true,
+          content: true,
+          trackingNo: true,
+          occurredAt: true,
+        },
+      });
+      const existingKeys = new Set(
+        existingTraces.map((trace) =>
+          this.buildLogisticsTraceKey({
+            status: trace.status,
+            content: trace.content,
+            trackingNo: trace.trackingNo,
+            occurredAt: trace.occurredAt,
+          }),
+        ),
+      );
+      const tracesToCreate = result.traces.filter((trace) => {
+        const key = this.buildLogisticsTraceKey({
+          status: trace.status,
+          content: trace.content,
+          trackingNo: order.trackingNo,
+          occurredAt: trace.occurredAt,
+        });
+
+        if (existingKeys.has(key)) {
+          return false;
+        }
+
+        existingKeys.add(key);
+        return true;
+      });
+
+      if (tracesToCreate.length > 0) {
+        await tx.orderLogisticsTrace.createMany({
+          data: tracesToCreate.map((trace) => ({
+            orderId: id,
+            status: trace.status,
+            content: trace.content,
+            logisticsCompany: order.logisticsCompany,
+            trackingNo: order.trackingNo,
+            occurredAt: trace.occurredAt,
+          })),
+        });
+      }
+
+      return tx.order.findUniqueOrThrow({
+        where: { id },
+        include: this.adminDetailInclude,
+      });
+    });
+  }
+
   async complete(userId: string, id: string) {
     const order = await this.findExisting(id);
     this.assertOrderOwner(order.userId, userId);
@@ -644,6 +729,64 @@ export class OrderService {
 
   private calculateOrderPoints(amount: Decimal) {
     return Math.floor(amount.toNumber());
+  }
+
+  private getPhoneTail(phone?: string | null) {
+    return phone ? phone.slice(-4) : undefined;
+  }
+
+  private buildLogisticsTraceKey(trace: {
+    status: string;
+    content: string;
+    trackingNo?: string | null;
+    occurredAt: Date;
+  }) {
+    return [
+      trace.status,
+      trace.content,
+      trace.trackingNo ?? '',
+      trace.occurredAt.toISOString(),
+    ].join('|');
+  }
+
+  private reserveLogisticsRefreshSlot(orderId: string) {
+    const cooldownSeconds = this.resolveLogisticsRefreshCooldownSeconds();
+
+    if (cooldownSeconds <= 0) {
+      return;
+    }
+
+    const now = Date.now();
+    const cooldownUntil = this.logisticsRefreshCooldownUntil.get(orderId);
+
+    if (cooldownUntil && cooldownUntil > now) {
+      const retryAfterSeconds = Math.ceil((cooldownUntil - now) / 1000);
+
+      throw new HttpException(
+        {
+          error: {
+            code: 'LOGISTICS_REFRESH_COOLDOWN',
+            retryAfterSeconds,
+          },
+          message: `Logistics refresh is cooling down. Please retry after ${retryAfterSeconds} seconds.`,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    this.logisticsRefreshCooldownUntil.set(orderId, now + cooldownSeconds * 1000);
+  }
+
+  private resolveLogisticsRefreshCooldownSeconds() {
+    const configuredCooldown = this.configService.get<number>('LOGISTICS_REFRESH_COOLDOWN_SECONDS');
+
+    if (configuredCooldown !== undefined) {
+      return configuredCooldown;
+    }
+
+    const provider = this.configService.get<string>('LOGISTICS_PROVIDER') ?? 'mock';
+
+    return provider === 'mock' ? 0 : 60;
   }
 
   private readonly detailInclude = {

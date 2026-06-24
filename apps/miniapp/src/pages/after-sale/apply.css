@@ -157,6 +157,16 @@
   line-height: 1.45;
 }
 
+.after-sale-textarea.evidence {
+  min-height: 144px;
+}
+
+.after-sale-evidence-tip {
+  display: block;
+  color: #667085;
+  font-size: 24px;
+}
+
 .after-sale-warning {
   padding: 16px;
   background: #fff7ed;

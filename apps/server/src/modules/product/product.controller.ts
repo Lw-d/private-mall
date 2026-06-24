@@ -15,6 +15,7 @@ import { AdminAuthGuard } from '../admin/guards/admin-auth.guard';
 import { ApiCommonErrorResponses } from '../common/decorators/api-common-error-responses.decorator';
 import { ApiWrappedOkResponse } from '../common/decorators/api-wrapped-ok-response.decorator';
 import { CreateProductDto } from './dto/create-product.dto';
+import { HomeBannerResponseDto } from './dto/home-banner-response.dto';
 import { ProductResponseDto } from './dto/product-response.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto';
@@ -47,6 +48,16 @@ export class ProductController {
   })
   findMany(@Query() query: QueryProductsDto) {
     return this.productService.findManyPublic(query);
+  }
+
+  @Get('/home-banners')
+  @ApiWrappedOkResponse({
+    description: 'List home carousel banner products.',
+    type: HomeBannerResponseDto,
+    isArray: true,
+  })
+  findHomeBanners() {
+    return this.productService.findHomeBanners();
   }
 
   @Get(':id')

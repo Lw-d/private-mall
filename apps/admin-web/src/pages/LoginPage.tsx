@@ -1,9 +1,10 @@
 import { LockOutlined, ShopOutlined } from '@ant-design/icons';
-import { Button, Card, Form, Input, Space, Typography, message } from 'antd';
+import { Button, Card, Form, Input, Space, Typography } from 'antd';
 import { useState } from 'react';
 
 import { showApiError } from '../api/error';
 import { AdminLoginInput } from '../api/types';
+import { appMessage } from '../utils/appMessage';
 
 interface LoginPageProps {
   onLogin: (values: AdminLoginInput) => Promise<void>;
@@ -16,7 +17,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     try {
       setLoading(true);
       await onLogin(values);
-      message.success('登录成功');
+      appMessage.success('登录成功');
     } catch (error) {
       showApiError(error, '登录失败');
     } finally {

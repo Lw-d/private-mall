@@ -16,7 +16,11 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentService } from '../payment/payment.service';
 import { CreateAfterSaleDto } from './dto/create-after-sale.dto';
-import { QueryAdminAfterSalesDto, QueryAfterSalesDto } from './dto/query-after-sales.dto';
+import {
+  QueryAdminAfterSalesDto,
+  QueryAfterSalesDto,
+  QueryAfterSaleSummaryDto,
+} from './dto/query-after-sales.dto';
 import {
   ApproveAfterSaleDto,
   ConfirmReturnReceivedDto,
@@ -123,6 +127,45 @@ export class AfterSaleService {
       total,
       page,
       pageSize,
+    };
+  }
+
+  async getSummary(userId: string, query: QueryAfterSaleSummaryDto) {
+    const where: Prisma.AfterSaleWhereInput = {
+      userId,
+      orderId: query.orderId,
+      type: query.type,
+    };
+
+    const [total, groupedStatusCounts] = await this.prisma.$transaction([
+      this.prisma.afterSale.count({ where }),
+      this.prisma.afterSale.groupBy({
+        by: ['status'],
+        where,
+        orderBy: {
+          status: 'asc',
+        },
+        _count: {
+          status: true,
+        },
+      }),
+    ]);
+
+    const countMap = new Map(
+      groupedStatusCounts.map((item) => {
+        const count =
+          item._count && typeof item._count === 'object' ? (item._count.status ?? 0) : 0;
+
+        return [item.status, count] as const;
+      }),
+    );
+
+    return {
+      total,
+      statusCounts: Object.values(AfterSaleStatus).map((status) => ({
+        status,
+        count: countMap.get(status) ?? 0,
+      })),
     };
   }
 

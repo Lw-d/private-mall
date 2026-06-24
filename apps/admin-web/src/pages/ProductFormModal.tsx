@@ -10,7 +10,6 @@ import {
   Switch,
   Typography,
   Upload,
-  message,
 } from 'antd';
 import type { UploadProps } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
@@ -18,6 +17,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { uploadImage } from '../api/adminApi';
 import { showApiError } from '../api/error';
 import { Category, Product, ProductInput, ProductStatus } from '../api/types';
+import { appMessage } from '../utils/appMessage';
 
 interface ProductFormModalProps {
   categories: Category[];
@@ -126,7 +126,7 @@ export function ProductFormModal({
     try {
       const result = await uploadImage(file);
       form.setFieldValue('mainImageUrl', result.url);
-      message.success('图片上传成功');
+      appMessage.success('图片上传成功');
       options.onSuccess?.(result);
     } catch (error) {
       const uploadError = error instanceof Error ? error : new Error('图片上传失败');

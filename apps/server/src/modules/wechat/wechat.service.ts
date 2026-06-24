@@ -328,11 +328,13 @@ export class WechatService {
     }
 
     if (payload.errcode) {
-      throw new UnauthorizedException(payload.errmsg || 'Wechat code2Session failed');
+      throw new UnauthorizedException(
+        payload.errmsg ? `微信登录失败：${payload.errmsg}` : '微信登录失败，请重试',
+      );
     }
 
     if (!payload.openid) {
-      throw new UnauthorizedException('Wechat code2Session did not return openId');
+      throw new UnauthorizedException('微信登录失败：未获取到用户标识');
     }
 
     return {
@@ -397,11 +399,11 @@ export class WechatService {
     const publicKeyPath = this.configService.get<string>('WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH');
 
     if (!timestamp || !nonce || !signature || !serial || !message.body) {
-      throw new UnauthorizedException(`Wechat Pay ${message.usage} signature headers are missing`);
+      throw new UnauthorizedException(`微信支付${message.usage}签名请求头缺失`);
     }
 
     if (platformSerial && platformSerial !== serial) {
-      throw new UnauthorizedException(`Wechat Pay ${message.usage} serial mismatch`);
+      throw new UnauthorizedException(`微信支付${message.usage}证书序列号不匹配`);
     }
 
     if (!publicKeyPath) {
@@ -413,7 +415,7 @@ export class WechatService {
     verify.update([timestamp, nonce, message.body, ''].join('\n'));
 
     if (!verify.verify(publicKey, signature, 'base64')) {
-      throw new UnauthorizedException(`Wechat Pay ${message.usage} signature is invalid`);
+      throw new UnauthorizedException(`微信支付${message.usage}签名无效`);
     }
   }
 

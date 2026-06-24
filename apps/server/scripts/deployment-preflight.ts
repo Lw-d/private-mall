@@ -69,6 +69,24 @@ function checkRequiredHttpsUrl(name: string) {
   add('pass', `${name} is a public HTTPS URL`);
 }
 
+function checkOptionalNonNegativeInteger(name: string) {
+  const rawValue = value(name);
+
+  if (!rawValue) {
+    add('warn', `${name} is not set; application default will be used`);
+    return;
+  }
+
+  const parsedValue = Number(rawValue);
+
+  if (!Number.isInteger(parsedValue) || parsedValue < 0) {
+    add('fail', `${name} must be a non-negative integer`);
+    return;
+  }
+
+  add('pass', `${name}=${parsedValue}`);
+}
+
 function checkSecret(name: string, blockedValues: string[]) {
   const rawValue = value(name);
 
@@ -207,6 +225,7 @@ function checkWechatModes() {
 
 function checkFrontendModes() {
   checkRequiredHttpsUrl('VITE_API_BASE_URL');
+  checkOptionalNonNegativeInteger('VITE_LOGISTICS_REFRESH_COOLDOWN_SECONDS');
   checkRequiredHttpsUrl('TARO_APP_API_BASE_URL');
 
   if (value('TARO_APP_PAYMENT_MODE') !== 'real') {

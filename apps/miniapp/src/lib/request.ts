@@ -7,6 +7,8 @@ import {
 } from '@mall/api-sdk';
 
 import { ACCESS_TOKEN_KEY } from '../store/storageKeys';
+import { notifySessionExpired } from '../store/sessionEvents';
+import { useSessionStore } from '../store/sessionStore';
 
 export type ApiResponse<T> = ApiSuccessResponse<T>;
 export { ApiClientError as ApiError };
@@ -27,6 +29,11 @@ export async function request<T>(path: string, options: RequestOptions = {}) {
       ...options.header,
     },
   });
+
+  if (response.statusCode === 401 && token) {
+    useSessionStore.getState().clearSession();
+    notifySessionExpired();
+  }
 
   return unwrapApiResponse<T>(response.data, response.statusCode);
 }

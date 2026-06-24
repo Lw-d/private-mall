@@ -7,6 +7,7 @@ import { createAfterSale, fetchAfterSales, fetchOrderDetail } from '../../api/or
 import { AfterSale, AfterSaleType, Order } from '../../api/types';
 import { PageShell } from '../../components/PageShell';
 import { useSessionStore } from '../../store/sessionStore';
+import { emitAfterSaleListUpdate } from './events';
 import './apply.css';
 
 const afterSaleTypeOptions: Array<{
@@ -80,6 +81,7 @@ export default function AfterSaleApplyPage() {
   const [type, setType] = useState<AfterSaleType>('REFUND_ONLY');
   const [reason, setReason] = useState('');
   const [description, setDescription] = useState('');
+  const [evidenceInput, setEvidenceInput] = useState('');
   const [requestedAmount, setRequestedAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -120,6 +122,7 @@ export default function AfterSaleApplyPage() {
 
     const trimmedReason = reason.trim();
     const amount = Number(requestedAmount);
+    const evidenceImageUrls = parseEvidenceImageUrls(evidenceInput);
 
     if (!trimmedReason) {
       void Taro.showToast({ title: '请填写申请原因', icon: 'none' });
@@ -136,6 +139,11 @@ export default function AfterSaleApplyPage() {
       return;
     }
 
+    if (evidenceImageUrls.length > 6) {
+      void Taro.showToast({ title: '凭证最多 6 张', icon: 'none' });
+      return;
+    }
+
     if (type === 'RETURN_REFUND' && !canApplyReturnRefund(order)) {
       void Taro.showToast({ title: '当前订单不支持退货退款', icon: 'none' });
       return;
@@ -148,8 +156,10 @@ export default function AfterSaleApplyPage() {
         type,
         reason: trimmedReason,
         description: description.trim() || undefined,
+        evidenceImageUrls: evidenceImageUrls.length ? evidenceImageUrls : undefined,
         requestedAmount: amount,
       });
+      emitAfterSaleListUpdate(afterSale);
       void Taro.showToast({ title: '已提交售后', icon: 'success' });
       void Taro.redirectTo({ url: `/pages/after-sale/detail?id=${afterSale.id}` });
     } catch (error) {
@@ -309,6 +319,18 @@ export default function AfterSaleApplyPage() {
                 value={description}
                 onInput={(event) => setDescription(event.detail.value)}
               />
+              <Textarea
+                className="after-sale-textarea evidence"
+                maxlength={3000}
+                placeholder="凭证图片链接（选填），每行一个，最多 6 张"
+                value={evidenceInput}
+                onInput={(event) => setEvidenceInput(event.detail.value)}
+              />
+              {parseEvidenceImageUrls(evidenceInput).length > 0 ? (
+                <Text className="after-sale-evidence-tip">
+                  已填写 {parseEvidenceImageUrls(evidenceInput).length} 张凭证
+                </Text>
+              ) : null}
               {disabledReason ? <Text className="after-sale-warning">{disabledReason}</Text> : null}
               <Button
                 className="after-sale-primary-button full"
@@ -324,4 +346,11 @@ export default function AfterSaleApplyPage() {
       </View>
     </PageShell>
   );
+}
+
+function parseEvidenceImageUrls(value: string) {
+  return value
+    .split(/[\n,，]/)
+    .map((url) => url.trim())
+    .filter(Boolean);
 }

@@ -70,4 +70,17 @@ export class AdminOrderController {
   addLogisticsTrace(@Param('id') id: string, @Body() dto: AddOrderLogisticsTraceDto) {
     return this.orderService.addLogisticsTraceForAdmin(id, dto);
   }
+
+  @Post(':id/logistics-traces/refresh')
+  @ApiOperation({
+    summary: '商家后台刷新订单物流轨迹',
+    description: '通过物流服务商适配层查询物流轨迹，并幂等写入订单物流轨迹表。',
+  })
+  @ApiWrappedOkResponse({
+    type: AdminOrderDto,
+    description: 'Refresh logistics traces and return latest order detail.',
+  })
+  refreshLogisticsTraces(@Param('id') id: string) {
+    return this.orderService.refreshLogisticsTracesForAdmin(id);
+  }
 }

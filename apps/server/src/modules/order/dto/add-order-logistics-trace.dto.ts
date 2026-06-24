@@ -10,6 +10,8 @@ export const ORDER_LOGISTICS_TRACE_STATUSES = [
   'EXCEPTION',
 ] as const;
 
+export type OrderLogisticsTraceStatus = (typeof ORDER_LOGISTICS_TRACE_STATUSES)[number];
+
 export class AddOrderLogisticsTraceDto {
   @ApiProperty({ enum: ORDER_LOGISTICS_TRACE_STATUSES, example: 'IN_TRANSIT' })
   @IsString()

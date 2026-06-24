@@ -5,6 +5,7 @@ import { CategoryService } from '../category/category.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
+import { UpdateHomeBannersDto } from './dto/update-home-banners.dto';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 
@@ -78,6 +79,61 @@ export class ProductService {
       },
       include: this.detailInclude,
       orderBy: [{ sort: 'asc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  findHomeBanners() {
+    return this.prisma.homeBanner.findMany({
+      where: {
+        isActive: true,
+        product: {
+          status: ProductStatus.ON_SALE,
+        },
+      },
+      include: this.homeBannerInclude,
+      orderBy: [{ sort: 'asc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  findAdminHomeBanners() {
+    return this.prisma.homeBanner.findMany({
+      include: this.homeBannerInclude,
+      orderBy: [{ sort: 'asc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async updateHomeBanners(dto: UpdateHomeBannersDto) {
+    const productIds = dto.items.map((item) => item.productId);
+
+    if (productIds.length > 0) {
+      const productsCount = await this.prisma.product.count({
+        where: {
+          id: { in: productIds },
+        },
+      });
+
+      if (productsCount !== productIds.length) {
+        throw new BadRequestException('Home banner product does not exist');
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.homeBanner.deleteMany();
+
+      if (dto.items.length > 0) {
+        await tx.homeBanner.createMany({
+          data: dto.items.map((item, index) => ({
+            productId: item.productId,
+            sort: item.sort ?? index,
+            isActive: item.isActive ?? true,
+          })),
+        });
+      }
+
+      return tx.homeBanner.findMany({
+        include: this.homeBannerInclude,
+        orderBy: [{ sort: 'asc' }, { createdAt: 'desc' }],
+      });
     });
   }
 
@@ -215,4 +271,10 @@ export class ProductService {
       orderBy: [{ isMain: 'desc' }, { sort: 'asc' }, { createdAt: 'asc' }],
     },
   } satisfies Prisma.ProductInclude;
+
+  private readonly homeBannerInclude = {
+    product: {
+      include: this.detailInclude,
+    },
+  } satisfies Prisma.HomeBannerInclude;
 }

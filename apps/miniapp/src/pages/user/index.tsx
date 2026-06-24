@@ -2,11 +2,12 @@ import { Button, Image, Text, View } from '@tarojs/components';
 import Taro from '@tarojs/taro';
 import { useCallback, useEffect, useState } from 'react';
 
-import { fetchProfile, wxLogin } from '../../api/authApi';
+import { fetchProfile } from '../../api/authApi';
 import { showApiError } from '../../api/error';
 import { fetchPointLedger } from '../../api/pointApi';
 import { PointLedger } from '../../api/types';
 import { PageShell } from '../../components/PageShell';
+import { loginWithWechat, normalizeWechatAvatarUrl } from '../../lib/wechatLogin';
 import { useSessionStore } from '../../store/sessionStore';
 import './index.css';
 
@@ -14,7 +15,6 @@ export default function UserPage() {
   const accessToken = useSessionStore((state) => state.accessToken);
   const user = useSessionStore((state) => state.user);
   const isHydrated = useSessionStore((state) => state.isHydrated);
-  const setSession = useSessionStore((state) => state.setSession);
   const updateUser = useSessionStore((state) => state.updateUser);
   const clearSession = useSessionStore((state) => state.clearSession);
   const [loggingIn, setLoggingIn] = useState(false);
@@ -52,32 +52,10 @@ export default function UserPage() {
     }
   }, [accessToken, isHydrated, loadProfile]);
 
-  const readUserProfile = async () => {
-    try {
-      const profile = await Taro.getUserProfile({
-        desc: '用于完善会员资料',
-      });
-
-      return {
-        nickname: profile.userInfo.nickName,
-        avatarUrl: profile.userInfo.avatarUrl,
-      };
-    } catch {
-      return {};
-    }
-  };
-
   const handleLogin = async () => {
     setLoggingIn(true);
     try {
-      const [{ code }, profile] = await Promise.all([Taro.login(), readUserProfile()]);
-      const result = await wxLogin({
-        code,
-        nickname: profile.nickname,
-        avatarUrl: profile.avatarUrl,
-      });
-
-      setSession(result);
+      await loginWithWechat();
       void Taro.showToast({ title: '登录成功', icon: 'success' });
     } catch (error) {
       showApiError(error, '登录失败');
@@ -92,29 +70,28 @@ export default function UserPage() {
     void Taro.showToast({ title: '已退出', icon: 'success' });
   };
 
-  const displayName = user?.nickname ?? (accessToken ? '已登录用户' : '微信用户');
+  const displayName = user?.nickname ?? (accessToken ? '微信昵称' : '微信用户');
   const memberLevel = user?.memberLevel ?? 1;
   const growthValue = user?.growthValue ?? 0;
   const pointsBalance = user?.pointsBalance ?? 0;
   const recentPointLedgers = pointLedgers.slice(0, 3);
+  const avatarUrl = normalizeWechatAvatarUrl(user?.avatarUrl);
 
   return (
     <PageShell>
       <View className="user-card">
         <View className="avatar-placeholder">
-          {user?.avatarUrl ? (
-            <Image className="user-avatar" mode="aspectFill" src={user.avatarUrl} />
+          {avatarUrl ? (
+            <Image className="user-avatar" mode="aspectFill" src={avatarUrl} />
           ) : (
             <Text>会</Text>
           )}
         </View>
         <View className="user-info">
           <Text className="user-name">{displayName}</Text>
-          <Text className="user-copy">
-            {accessToken
-              ? `OpenID：${user?.openId ?? '已登录，等待资料同步'}`
-              : '登录后可查看订单、购物车和会员资料。'}
-          </Text>
+          {!accessToken ? (
+            <Text className="user-copy">登录后可查看订单、购物车和会员资料。</Text>
+          ) : null}
           <Text className={accessToken ? 'login-status active' : 'login-status'}>
             {accessToken ? '已登录' : '未登录'}
           </Text>
@@ -170,6 +147,16 @@ export default function UserPage() {
           onClick={() => Taro.navigateTo({ url: '/pages/order/list' })}
         >
           <Text>我的订单</Text>
+          <Text className="menu-arrow">›</Text>
+        </View>
+        <View
+          className="user-menu-item"
+          onClick={() => Taro.navigateTo({ url: '/pages/after-sale/list' })}
+        >
+          <View className="user-menu-label">
+            <Text>售后记录</Text>
+            <Text className="user-menu-badge">可追踪</Text>
+          </View>
           <Text className="menu-arrow">›</Text>
         </View>
         <View

@@ -5,20 +5,24 @@ import {
   Descriptions,
   Form,
   InputNumber,
+  Select,
   Space,
   Switch,
   Typography,
-  message,
 } from 'antd';
 import { useEffect, useState } from 'react';
 
 import {
   fetchAdminPointRedeemRules,
+  fetchHomeBanners,
+  fetchProducts,
   resetAdminPointRedeemRules,
   updateAdminPointRedeemRules,
+  updateHomeBanners,
 } from '../api/adminApi';
 import { showApiError } from '../api/error';
-import { PointRedeemRules } from '../api/types';
+import { HomeBanner, PointRedeemRules, Product } from '../api/types';
+import { appMessage } from '../utils/appMessage';
 
 interface PointRuleFormValues {
   enabled: boolean;
@@ -28,8 +32,13 @@ interface PointRuleFormValues {
 export function SettingPage() {
   const [pointRules, setPointRules] = useState<PointRedeemRules>();
   const [loading, setLoading] = useState(false);
+  const [bannerLoading, setBannerLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingBanners, setSavingBanners] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [bannerProducts, setBannerProducts] = useState<Product[]>([]);
+  const [homeBanners, setHomeBanners] = useState<HomeBanner[]>([]);
+  const [selectedBannerProductIds, setSelectedBannerProductIds] = useState<string[]>([]);
   const [form] = Form.useForm<PointRuleFormValues>();
 
   const load = async () => {
@@ -50,7 +59,26 @@ export function SettingPage() {
 
   useEffect(() => {
     void load();
+    void loadHomeBanners();
   }, []);
+
+  const loadHomeBanners = async () => {
+    setBannerLoading(true);
+    try {
+      const [products, banners] = await Promise.all([
+        fetchProducts({ status: 'ON_SALE' }),
+        fetchHomeBanners(),
+      ]);
+
+      setBannerProducts(products);
+      setHomeBanners(banners);
+      setSelectedBannerProductIds(banners.map((banner) => banner.productId));
+    } catch (error) {
+      showApiError(error, '首页轮播配置加载失败');
+    } finally {
+      setBannerLoading(false);
+    }
+  };
 
   const submit = async () => {
     const values = await form.validateFields();
@@ -63,7 +91,7 @@ export function SettingPage() {
         enabled: rules.enabled,
         pointsPerYuan: rules.pointsPerYuan,
       });
-      message.success('积分规则已保存');
+      appMessage.success('积分规则已保存');
     } catch (error) {
       showApiError(error, '积分规则保存失败');
     } finally {
@@ -80,7 +108,7 @@ export function SettingPage() {
         enabled: rules.enabled,
         pointsPerYuan: rules.pointsPerYuan,
       });
-      message.success('已恢复环境变量规则');
+      appMessage.success('已恢复环境变量规则');
     } catch (error) {
       showApiError(error, '积分规则恢复失败');
     } finally {
@@ -88,13 +116,29 @@ export function SettingPage() {
     }
   };
 
+  const submitHomeBanners = async () => {
+    setSavingBanners(true);
+    try {
+      const banners = await updateHomeBanners({
+        items: selectedBannerProductIds.map((productId, index) => ({
+          productId,
+          sort: index,
+          isActive: true,
+        })),
+      });
+
+      setHomeBanners(banners);
+      setSelectedBannerProductIds(banners.map((banner) => banner.productId));
+      appMessage.success('首页轮播商品已保存');
+    } catch (error) {
+      showApiError(error, '首页轮播商品保存失败');
+    } finally {
+      setSavingBanners(false);
+    }
+  };
+
   return (
     <section className="page">
-      <div className="page-title">
-        <Typography.Title level={4}>运营设置</Typography.Title>
-        <Typography.Text type="secondary">配置当前积分抵扣规则和运营参数来源。</Typography.Text>
-      </div>
-
       <Space direction="vertical" size={16} className="full-width">
         <Alert
           type="info"
@@ -148,6 +192,39 @@ export function SettingPage() {
               </Descriptions.Item>
               <Descriptions.Item label="小程序同步">
                 订单确认页通过 /api/points/rules 读取
+              </Descriptions.Item>
+            </Descriptions>
+          </Space>
+        </Card>
+
+        <Card title="首页轮播商品" loading={bannerLoading}>
+          <Space direction="vertical" size={16} className="full-width">
+            <Select
+              mode="multiple"
+              allowClear
+              className="full-width"
+              placeholder="选择小程序首页轮播展示的商品"
+              value={selectedBannerProductIds}
+              options={bannerProducts.map((product) => ({
+                value: product.id,
+                label: product.name,
+              }))}
+              onChange={setSelectedBannerProductIds}
+            />
+            <Typography.Text type="secondary">
+              小程序按选择顺序展示轮播图，最多保存 10 个商品。
+            </Typography.Text>
+            <Space>
+              <Button type="primary" loading={savingBanners} onClick={() => void submitHomeBanners()}>
+                保存轮播商品
+              </Button>
+              <Button onClick={() => void loadHomeBanners()}>重新加载</Button>
+            </Space>
+            <Descriptions size="small" column={1} bordered>
+              <Descriptions.Item label="当前配置">
+                {homeBanners.length > 0
+                  ? homeBanners.map((banner) => banner.product.name).join('、')
+                  : '未配置'}
               </Descriptions.Item>
             </Descriptions>
           </Space>

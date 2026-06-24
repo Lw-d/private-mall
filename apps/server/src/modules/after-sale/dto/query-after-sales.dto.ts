@@ -41,3 +41,15 @@ export class QueryAdminAfterSalesDto extends QueryAfterSalesDto {
   @IsString()
   keyword?: string;
 }
+
+export class QueryAfterSaleSummaryDto {
+  @ApiPropertyOptional({ type: String, example: 'cmp_order_id' })
+  @IsOptional()
+  @IsString()
+  orderId?: string;
+
+  @ApiPropertyOptional({ enum: AfterSaleType, example: AfterSaleType.RETURN_REFUND })
+  @IsOptional()
+  @IsEnum(AfterSaleType)
+  type?: AfterSaleType;
+}

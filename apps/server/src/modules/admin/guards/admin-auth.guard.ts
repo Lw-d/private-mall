@@ -29,7 +29,7 @@ export class AdminAuthGuard implements CanActivate {
     const token = this.extractBearerToken(request.headers.authorization);
 
     if (!token) {
-      throw new UnauthorizedException('Missing admin bearer token');
+      throw new UnauthorizedException('未登录，请先登录');
     }
 
     try {
@@ -38,7 +38,7 @@ export class AdminAuthGuard implements CanActivate {
       });
 
       if (payload.type !== 'admin') {
-        throw new UnauthorizedException('Invalid admin bearer token');
+        throw new UnauthorizedException('登录已失效，请重新登录');
       }
 
       const admin = await this.adminService.findActiveById(payload.sub);
@@ -49,7 +49,7 @@ export class AdminAuthGuard implements CanActivate {
       };
       return true;
     } catch {
-      throw new UnauthorizedException('Invalid admin bearer token');
+      throw new UnauthorizedException('登录已失效，请重新登录');
     }
   }
 

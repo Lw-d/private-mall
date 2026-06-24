@@ -10,7 +10,6 @@ import {
   Table,
   Tag,
   Typography,
-  message,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -18,12 +17,17 @@ import {
   addOrderLogisticsTrace,
   cancelOrder,
   fetchOrders,
+  refreshOrderLogisticsTraces,
   retryRefund,
   shipOrder,
   updateRefundStatus,
 } from '../api/adminApi';
+import { ApiError } from '../api/client';
 import { showApiError } from '../api/error';
 import { Order, OrderLogisticsTraceStatus, OrderStatus, RefundStatus } from '../api/types';
+import { appMessage } from '../utils/appMessage';
+
+const logisticsRefreshLocalCooldownSeconds = resolveLogisticsRefreshLocalCooldownSeconds();
 
 const orderStatuses: OrderStatus[] = [
   'PENDING_PAYMENT',
@@ -105,6 +109,18 @@ interface LogisticsTraceFormValues {
 type RefundRecord = NonNullable<Order['refunds']>[number];
 type LogisticsTraceRecord = NonNullable<Order['logisticsTraces']>[number];
 
+function resolveLogisticsRefreshLocalCooldownSeconds() {
+  const rawValue = import.meta.env.VITE_LOGISTICS_REFRESH_COOLDOWN_SECONDS;
+
+  if (rawValue === undefined || rawValue === '') {
+    return 60;
+  }
+
+  const value = Number(rawValue);
+
+  return Number.isFinite(value) && value >= 0 ? value : 60;
+}
+
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleString() : '-';
 }
@@ -158,6 +174,26 @@ function getLatestLogisticsTrace(order: Order) {
   return order.logisticsTraces?.[0];
 }
 
+function getLogisticsRefreshCooldownRetryAfter(error: unknown) {
+  if (!(error instanceof ApiError)) {
+    return undefined;
+  }
+
+  const apiError = error.error;
+
+  if (typeof apiError !== 'object' || apiError === null) {
+    return undefined;
+  }
+
+  const code = 'code' in apiError ? apiError.code : undefined;
+  const retryAfterSeconds =
+    'retryAfterSeconds' in apiError ? apiError.retryAfterSeconds : undefined;
+
+  return code === 'LOGISTICS_REFRESH_COOLDOWN' && typeof retryAfterSeconds === 'number'
+    ? retryAfterSeconds
+    : undefined;
+}
+
 export function OrderPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [status, setStatus] = useState<OrderStatus | undefined>();
@@ -174,6 +210,11 @@ export function OrderPage() {
   const [rejectingRefund, setRejectingRefund] = useState<RefundRecord | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [processingRefundId, setProcessingRefundId] = useState<string>();
+  const [refreshingLogisticsOrderId, setRefreshingLogisticsOrderId] = useState<string>();
+  const [logisticsRefreshCooldownUntil, setLogisticsRefreshCooldownUntil] = useState<
+    Record<string, number>
+  >({});
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const [shipForm] = Form.useForm<ShipOrderFormValues>();
   const [traceForm] = Form.useForm<LogisticsTraceFormValues>();
   const [rejectRefundForm] = Form.useForm<RejectRefundFormValues>();
@@ -218,6 +259,23 @@ export function OrderPage() {
     void load();
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+
+      setClockNow(now);
+      setLogisticsRefreshCooldownUntil((current) => {
+        const entries = Object.entries(current).filter(([, cooldownUntil]) => cooldownUntil > now);
+
+        return entries.length === Object.keys(current).length
+          ? current
+          : Object.fromEntries(entries);
+      });
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
   const openShipModal = (order: Order) => {
     setShippingOrder(order);
     shipForm.setFieldsValue({
@@ -234,7 +292,7 @@ export function OrderPage() {
     setSubmitting(true);
     try {
       await shipOrder(shippingOrder.id, values);
-      message.success(
+      appMessage.success(
         values.trackingNo
           ? `订单 ${shippingOrder.orderNo} 已发货，物流单号：${values.trackingNo}`
           : `订单 ${shippingOrder.orderNo} 已发货`,
@@ -266,7 +324,7 @@ export function OrderPage() {
     setSubmitting(true);
     try {
       await addOrderLogisticsTrace(tracingOrder.id, values);
-      message.success(`订单 ${tracingOrder.orderNo} 已追加物流轨迹`);
+      appMessage.success(`订单 ${tracingOrder.orderNo} 已追加物流轨迹`);
       setTracingOrder(null);
       traceForm.resetFields();
       await load({ page, pageSize });
@@ -277,11 +335,31 @@ export function OrderPage() {
     }
   };
 
+  const submitRefreshLogisticsTraces = async (order: Order) => {
+    setLogisticsRefreshCooldown(order.id, logisticsRefreshLocalCooldownSeconds);
+    setRefreshingLogisticsOrderId(order.id);
+    try {
+      await refreshOrderLogisticsTraces(order.id);
+      appMessage.success(`订单 ${order.orderNo} 已刷新物流轨迹`);
+      await load({ page, pageSize });
+    } catch (error) {
+      const retryAfterSeconds = getLogisticsRefreshCooldownRetryAfter(error);
+
+      if (retryAfterSeconds !== undefined) {
+        setLogisticsRefreshCooldown(order.id, retryAfterSeconds);
+      }
+
+      showApiError(error, '刷新物流轨迹失败');
+    } finally {
+      setRefreshingLogisticsOrderId(undefined);
+    }
+  };
+
   const submitRefundStatus = async (refundId: string, status: 'SUCCESS' | 'FAILED') => {
     setProcessingRefundId(refundId);
     try {
       await updateRefundStatus(refundId, { status });
-      message.success(status === 'SUCCESS' ? '退款已确认' : '退款已驳回');
+      appMessage.success(status === 'SUCCESS' ? '退款已确认' : '退款已驳回');
       await load({ page, pageSize });
     } catch (error) {
       showApiError(error, status === 'SUCCESS' ? '确认退款失败' : '驳回退款失败');
@@ -309,7 +387,7 @@ export function OrderPage() {
         failureReason,
         status: 'FAILED',
       });
-      message.success('退款已驳回');
+      appMessage.success('退款已驳回');
       setRejectingRefund(null);
       rejectRefundForm.resetFields();
       await load({ page, pageSize });
@@ -324,13 +402,34 @@ export function OrderPage() {
     setProcessingRefundId(refundId);
     try {
       await retryRefund(refundId);
-      message.success('已重新发起退款');
+      appMessage.success('已重新发起退款');
       await load({ page, pageSize });
     } catch (error) {
       showApiError(error, '重试退款失败');
     } finally {
       setProcessingRefundId(undefined);
     }
+  };
+
+  const setLogisticsRefreshCooldown = (orderId: string, seconds: number) => {
+    if (seconds <= 0) {
+      return;
+    }
+
+    setLogisticsRefreshCooldownUntil((current) => ({
+      ...current,
+      [orderId]: Date.now() + seconds * 1000,
+    }));
+  };
+
+  const getLogisticsRefreshCooldownSeconds = (orderId: string) => {
+    const cooldownUntil = logisticsRefreshCooldownUntil[orderId];
+
+    if (!cooldownUntil || cooldownUntil <= clockNow) {
+      return 0;
+    }
+
+    return Math.ceil((cooldownUntil - clockNow) / 1000);
   };
 
   const columns = useMemo(
@@ -389,7 +488,7 @@ export function OrderPage() {
               onConfirm={async () => {
                 try {
                   await cancelOrder(record.id);
-                  message.success('订单已取消');
+                  appMessage.success('订单已取消');
                   await load({ page, pageSize });
                 } catch (error) {
                   showApiError(error, '取消失败');
@@ -475,6 +574,20 @@ export function OrderPage() {
             onClick={() => openTraceModal(order)}
           >
             追加轨迹
+          </Button>
+          <Button
+            size="small"
+            disabled={
+              !order.shippedAt ||
+              !order.trackingNo ||
+              getLogisticsRefreshCooldownSeconds(order.id) > 0
+            }
+            loading={refreshingLogisticsOrderId === order.id}
+            onClick={() => void submitRefreshLogisticsTraces(order)}
+          >
+            {getLogisticsRefreshCooldownSeconds(order.id) > 0
+              ? `刷新物流 ${getLogisticsRefreshCooldownSeconds(order.id)}s`
+              : '刷新物流'}
           </Button>
         </Space>
         {order.logisticsTraces?.length ? (
@@ -605,12 +718,6 @@ export function OrderPage() {
 
   return (
     <section className="page">
-      <div className="page-title">
-        <Typography.Title level={4}>订单管理</Typography.Title>
-        <Typography.Text type="secondary">
-          查看订单状态，处理取消、发货和售后前置流程。
-        </Typography.Text>
-      </div>
       <Space className="toolbar" wrap>
         <Select
           allowClear
@@ -670,11 +777,13 @@ export function OrderPage() {
         </Button>
       </Space>
       <Table
+        className="page-table"
         rowKey="id"
         loading={loading}
         columns={columns}
         dataSource={orders}
         expandable={{ expandedRowRender }}
+        scroll={{ x: 'max-content', y: '100%' }}
         pagination={{
           current: page,
           pageSize,

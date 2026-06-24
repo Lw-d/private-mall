@@ -376,6 +376,7 @@ interface AfterSale {
 ```text
 POST /api/after-sales
 GET  /api/after-sales
+GET  /api/after-sales/summary
 GET  /api/after-sales/:id
 PATCH /api/after-sales/:id/cancel
 PATCH /api/after-sales/:id/return-logistics
@@ -398,6 +399,19 @@ interface SubmitReturnLogisticsInput {
   returnTrackingNo: string;
   returnRemark?: string;
 }
+
+interface UserAfterSaleSummaryQuery {
+  orderId?: ID;
+  type?: AfterSaleType;
+}
+
+interface AfterSaleSummary {
+  total: number;
+  statusCounts: Array<{
+    status: AfterSaleStatus;
+    count: number;
+  }>;
+}
 ```
 
 约束：
@@ -410,6 +424,7 @@ interface SubmitReturnLogisticsInput {
 - 用户仅可取消 `REQUESTED` 或 `WAIT_BUYER_RETURN` 状态的售后单。
 - 用户仅可在 `WAIT_BUYER_RETURN` 状态填写退货物流，填写后进入 `BUYER_RETURNED`。
 - 用户侧售后列表支持 `orderId` 查询参数，用于订单详情页展示当前订单关联售后。
+- 用户侧售后计数聚合接口支持按 `orderId` 和 `type` 筛选，一次返回总数和各状态数量，用于小程序售后列表状态 tab / 概览卡片。
 
 ### 后台接口
 
@@ -546,3 +561,179 @@ pnpm db:seed
 ```
 
 P8-02 当前已通过静态校验和服务端构建。完整数据库 smoke 需要 Docker 启动后再补。
+
+## P8-07 订单物流查询适配层
+
+P8-07 新增服务端物流查询适配层，当前默认接入 `mock` provider，后续真实快递聚合服务或直连服务商只替换 provider，不把第三方字段扩散到订单业务代码。
+
+后台新增接口：
+
+```text
+POST /api/admin/orders/:id/logistics-traces/refresh
+```
+
+接口行为：
+
+- 仅已发货订单可刷新物流。
+- 订单必须已有 `trackingNo`。
+- 服务端通过 `LogisticsService` 查询 provider，并写入现有 `OrderLogisticsTrace`。
+- 写入时按状态、内容、物流单号、发生时间做幂等去重，重复刷新不会重复插入同一条轨迹。
+- 默认 `LOGISTICS_PROVIDER=mock`。
+- P8-12 新增 `LOGISTICS_PROVIDER=http-json`，用于对接返回标准 JSON 的物流查询网关或聚合服务适配层。
+
+后台页面：
+
+- 订单管理展开行的“物流轨迹”区域新增“刷新物流”按钮。
+- 有发货时间和物流单号时按钮可用。
+
+### http-json provider 契约
+
+启用配置：
+
+```text
+LOGISTICS_PROVIDER=http-json
+LOGISTICS_HTTP_QUERY_URL=https://example.com/logistics/query
+LOGISTICS_HTTP_AUTH_TOKEN=<optional bearer token>
+LOGISTICS_HTTP_SIGNING_SECRET=<optional hmac secret>
+LOGISTICS_HTTP_TIMEOUT_MS=5000
+LOGISTICS_HTTP_RETRY_ATTEMPTS=0
+LOGISTICS_HTTP_RETRY_DELAY_MS=300
+LOGISTICS_REFRESH_COOLDOWN_SECONDS=60
+```
+
+服务端会向 `LOGISTICS_HTTP_QUERY_URL` 发送 `POST application/json` 请求。配置了 `LOGISTICS_HTTP_AUTH_TOKEN` 时，会附带：
+
+```text
+Authorization: Bearer <token>
+```
+
+配置了 `LOGISTICS_HTTP_SIGNING_SECRET` 时，会额外附带 HMAC-SHA256 签名头：
+
+```text
+X-Logistics-Signature-Version: hmac-sha256-v1
+X-Logistics-Timestamp: 2026-06-18T08:00:00.000Z
+X-Logistics-Nonce: <uuid>
+X-Logistics-Signature: <hex hmac>
+```
+
+签名明文：
+
+```text
+<timestamp>.<nonce>.<raw-json-body>
+```
+
+请求体：
+
+```json
+{
+  "logisticsCompany": "顺丰速运",
+  "logisticsCompanyCode": "SF",
+  "trackingNo": "SF1234567890",
+  "receiverPhoneTail": "0000",
+  "orderNo": "MO20260618154626BVZ8CE",
+  "afterSaleNo": null
+}
+```
+
+响应体必须是内部标准结构：
+
+```json
+{
+  "status": "IN_TRANSIT",
+  "queriedAt": "2026-06-18T08:00:00.000Z",
+  "traces": [
+    {
+      "status": "PICKED_UP",
+      "content": "快递员已揽收包裹",
+      "occurredAt": "2026-06-18T07:20:00.000Z"
+    },
+    {
+      "status": "IN_TRANSIT",
+      "content": "包裹正在发往下一站",
+      "occurredAt": "2026-06-18T09:00:00.000Z"
+    }
+  ],
+  "rawPayload": {
+    "provider": "your-provider-name"
+  }
+}
+```
+
+字段要求：
+
+- `status` 和 `traces[].status` 必须是内部状态之一：`SHIPPED`、`PICKED_UP`、`IN_TRANSIT`、`DELIVERING`、`DELIVERED`、`EXCEPTION`。
+- `traces[].content` 不能为空。
+- `traces[].occurredAt` 必须是可解析时间。
+- provider 返回非 2xx、空轨迹、非法状态或非法时间时，服务端会返回物流查询失败。
+
+物流 provider 错误响应会保持 HTTP 状态语义，同时在 `error.code` 中返回内部错误码：
+
+```json
+{
+  "code": 503,
+  "message": "Logistics provider returned 503",
+  "error": {
+    "code": "LOGISTICS_PROVIDER_HTTP_ERROR",
+    "provider": "http-json",
+    "httpStatus": 503
+  }
+}
+```
+
+当前错误码：
+
+- `LOGISTICS_PROVIDER_MISSING_ENDPOINT`：启用 `http-json` 但缺少 `LOGISTICS_HTTP_QUERY_URL`。
+- `LOGISTICS_PROVIDER_HTTP_ERROR`：provider 返回非 2xx。
+- `LOGISTICS_PROVIDER_INVALID_JSON`：provider 响应不是合法 JSON。
+- `LOGISTICS_PROVIDER_INVALID_STATUS`：provider 返回了未知物流状态。
+- `LOGISTICS_PROVIDER_INVALID_TRACE`：轨迹内容为空或发生时间不可解析。
+- `LOGISTICS_PROVIDER_NO_TRACES`：provider 未返回有效轨迹。
+- `LOGISTICS_PROVIDER_TIMEOUT`：请求超时。
+- `LOGISTICS_PROVIDER_QUERY_FAILED`：网络或其它未分类查询失败。
+
+重试策略：
+
+- `LOGISTICS_HTTP_RETRY_ATTEMPTS` 默认为 `0`，即保持单次查询。
+- 设置为 `1` 表示失败后最多额外重试 1 次。
+- `LOGISTICS_HTTP_RETRY_DELAY_MS` 控制每次重试前等待时间，默认 `300` 毫秒。
+- 仅以下临时失败会重试：
+  - `LOGISTICS_PROVIDER_TIMEOUT`
+  - `LOGISTICS_PROVIDER_QUERY_FAILED`
+  - `LOGISTICS_PROVIDER_HTTP_ERROR` 且 provider HTTP 状态为 `5xx`
+- 配置错误、非法 JSON、非法状态、空轨迹和非法轨迹不会重试。
+
+后台刷新频控：
+
+- 未显式配置 `LOGISTICS_REFRESH_COOLDOWN_SECONDS` 时，`mock` provider 默认不启用服务端冷却，非 `mock` provider 默认 `60` 秒。
+- 设置 `LOGISTICS_REFRESH_COOLDOWN_SECONDS=60` 可显式启用 60 秒冷却。
+- 同一 API 实例内，同一订单在冷却期内重复调用刷新接口会返回 `429`。
+- 设置为 `0` 可关闭本地冷却。
+- 当前冷却为进程内保护，适合本地和单实例部署；多实例强一致频控可后续升级为 Redis 锁。
+
+冷却错误示例：
+
+```json
+{
+  "code": 429,
+  "message": "Logistics refresh is cooling down. Please retry after 58 seconds.",
+  "error": {
+    "code": "LOGISTICS_REFRESH_COOLDOWN",
+    "retryAfterSeconds": 58
+  }
+}
+```
+
+后台页面本地冷却：
+
+- 商家后台订单页默认点击“刷新物流”后会进入 60 秒本地按钮冷却。
+- 可通过 `VITE_LOGISTICS_REFRESH_COOLDOWN_SECONDS` 调整。
+- 设置为 `0` 可关闭前端本地按钮冷却。
+- 如果服务端返回 `LOGISTICS_REFRESH_COOLDOWN`，前端会使用响应里的 `retryAfterSeconds` 校准倒计时。
+
+本地 fake endpoint smoke：
+
+```bash
+pnpm smoke:logistics-provider
+```
+
+该脚本不依赖数据库或 Nest API，会直接验证 `http-json` provider 的请求格式、Bearer Token、HMAC 签名、响应归一化和失败分支错误码。

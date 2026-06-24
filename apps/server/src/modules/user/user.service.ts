@@ -26,21 +26,24 @@ export class UserService {
   }
 
   async upsertWechatUser(input: UpsertWechatUserInput) {
+    const nickname = input.nickname?.trim() || undefined;
+    const avatarUrl = input.avatarUrl?.trim() || undefined;
+
     return this.prisma.user.upsert({
       where: {
         openId: input.openId,
       },
       update: {
         unionId: input.unionId,
-        nickname: input.nickname,
-        avatarUrl: input.avatarUrl,
+        nickname,
+        avatarUrl,
         lastLoginAt: new Date(),
       },
       create: {
         openId: input.openId,
         unionId: input.unionId,
-        nickname: input.nickname,
-        avatarUrl: input.avatarUrl,
+        nickname,
+        avatarUrl,
         lastLoginAt: new Date(),
       },
     });

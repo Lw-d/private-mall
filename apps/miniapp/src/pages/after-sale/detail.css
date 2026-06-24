@@ -140,6 +140,49 @@
   font-weight: 800;
 }
 
+.after-sale-evidence-block {
+  padding: 14px 0;
+  border-bottom: 1px solid #eef2f6;
+}
+
+.after-sale-evidence-list {
+  display: flex;
+  margin-top: 14px;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.after-sale-evidence-item {
+  position: relative;
+  width: 144px;
+  height: 144px;
+  overflow: hidden;
+  background: #f8fafc;
+  border: 1px solid #e7edf3;
+  border-radius: 8px;
+}
+
+.after-sale-evidence-image {
+  width: 100%;
+  height: 100%;
+}
+
+.after-sale-evidence-index {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  background: rgb(15 23 42 / 68%);
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 800;
+}
+
 .after-sale-form-field {
   margin-bottom: 18px;
 }
@@ -255,10 +298,13 @@
 }
 
 .after-sale-footer-actions {
+  display: flex;
   padding-bottom: 16px;
+  gap: 14px;
 }
 
 .after-sale-back-button,
+.after-sale-order-button,
 .after-sale-primary-button {
   height: 76px;
   margin: 0;
@@ -268,10 +314,16 @@
 }
 
 .after-sale-back-button {
-  width: 100%;
+  flex: 1;
   background: #ffffff;
   border: 1px solid #d0d5dd;
   color: #475467;
+}
+
+.after-sale-order-button {
+  flex: 1;
+  background: #0f766e;
+  color: #ffffff;
 }
 
 .after-sale-primary-button {

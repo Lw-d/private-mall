@@ -205,6 +205,7 @@ model Product {
   sort        Int            @default(0)
   skus        ProductSku[]
   images      ProductImage[]
+  homeBanners HomeBanner[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -212,6 +213,20 @@ model Product {
   @@index([status])
   @@index([name])
   @@map("products")
+}
+
+model HomeBanner {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sort      Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId])
+  @@index([isActive, sort])
+  @@map("home_banners")
 }
 
 model ProductSku {

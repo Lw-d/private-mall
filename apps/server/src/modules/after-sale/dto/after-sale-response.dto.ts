@@ -181,3 +181,19 @@ export class AfterSaleListResultDto {
   @ApiProperty({ type: Number, example: 10 })
   pageSize!: number;
 }
+
+export class AfterSaleStatusCountDto {
+  @ApiProperty({ enum: AfterSaleStatus, example: AfterSaleStatus.REQUESTED })
+  status!: AfterSaleStatus;
+
+  @ApiProperty({ type: Number, example: 3 })
+  count!: number;
+}
+
+export class AfterSaleSummaryResponseDto {
+  @ApiProperty({ type: Number, example: 12 })
+  total!: number;
+
+  @ApiProperty({ type: [AfterSaleStatusCountDto] })
+  statusCounts!: AfterSaleStatusCountDto[];
+}

@@ -21,6 +21,7 @@
     "format:check": "prettier --check .",
     "integration:check": "pnpm --filter @mall/server integration:check",
     "integration:record": "pnpm --filter @mall/server integration:record",
+    "smoke:logistics-provider": "pnpm --filter @mall/server smoke:logistics-provider",
     "smoke:transaction": "pnpm --filter @mall/server smoke:transaction",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test"

@@ -23,6 +23,8 @@ export type {
   CouponStatus,
   ConfirmReturnReceivedInput,
   DashboardOverview,
+  HomeBanner,
+  HomeBannerInput,
   Order,
   OrderLogisticsTraceStatus,
   OrderListResult,
@@ -39,6 +41,7 @@ export type {
   RejectAfterSaleInput,
   ShipOrderInput,
   UpdateCategoryInput,
+  UpdateHomeBannersInput,
   UploadResult,
 } from '@mall/shared-types';
 

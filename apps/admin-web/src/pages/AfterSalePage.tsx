@@ -10,7 +10,6 @@ import {
   Table,
   Tag,
   Typography,
-  message,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -32,6 +31,7 @@ import {
   RejectAfterSaleInput,
   RefundStatus,
 } from '../api/types';
+import { appMessage } from '../utils/appMessage';
 
 const afterSaleStatuses: AfterSaleStatus[] = [
   'REQUESTED',
@@ -223,7 +223,7 @@ export function AfterSalePage() {
     setSubmitting(true);
     try {
       await approveAfterSale(reviewingAfterSale.id, input);
-      message.success(
+      appMessage.success(
         reviewingAfterSale.type === 'RETURN_REFUND' ? '售后已通过，等待买家退货' : '售后已通过',
       );
       setReviewingAfterSale(null);
@@ -256,7 +256,7 @@ export function AfterSalePage() {
     setSubmitting(true);
     try {
       await rejectAfterSale(rejectingAfterSale.id, input);
-      message.success('售后已驳回');
+      appMessage.success('售后已驳回');
       setRejectingAfterSale(null);
       rejectForm.resetFields();
       await load({ page, pageSize });
@@ -285,7 +285,7 @@ export function AfterSalePage() {
     setSubmitting(true);
     try {
       await confirmReturnReceived(confirmingAfterSale.id, input);
-      message.success('已确认收到退货');
+      appMessage.success('已确认收到退货');
       setConfirmingAfterSale(null);
       confirmReceivedForm.resetFields();
       await load({ page, pageSize });
@@ -306,7 +306,7 @@ export function AfterSalePage() {
         setSubmitting(true);
         try {
           await triggerAfterSaleRefund(afterSale.id);
-          message.success('已触发售后退款');
+          appMessage.success('已触发售后退款');
           await load({ page, pageSize });
         } catch (error) {
           showApiError(error, '触发退款失败');
@@ -481,12 +481,6 @@ export function AfterSalePage() {
 
   return (
     <section className="page">
-      <div className="page-title">
-        <Typography.Title level={4}>售后管理</Typography.Title>
-        <Typography.Text type="secondary">
-          查看用户售后申请，处理审核、退货物流、确认收货和售后退款。
-        </Typography.Text>
-      </div>
       <Space className="toolbar" wrap>
         <Select
           allowClear
@@ -541,11 +535,13 @@ export function AfterSalePage() {
         </Button>
       </Space>
       <Table
+        className="page-table"
         rowKey="id"
         loading={loading}
         columns={columns}
         dataSource={afterSales}
         expandable={{ expandedRowRender }}
+        scroll={{ x: 'max-content', y: '100%' }}
         pagination={{
           current: page,
           pageSize,

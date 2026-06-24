@@ -7946,3 +7946,1365 @@ P8-06：售后退款触发与退款状态回写，或先运行三端做售后链
 ```text
 P8-07：运行三端做售后退款链路 smoke / 视觉复验，或进入真实物流查询接入。
 ```
+
+## 2026-06-18 P8-07 物流查询适配层与后台刷新入口
+
+目标：
+
+- 在现有后台手动物流轨迹能力之上，新增真实物流查询前的 provider 适配层。
+- 先接入 mock provider，保持本地 smoke 和演示可运行。
+- 后台订单管理支持手动刷新物流轨迹。
+- 不引入新表，不把第三方物流服务商字段扩散到订单业务代码。
+
+本次完成：
+
+- 新增服务端物流模块：
+  - `LogisticsModule`
+  - `LogisticsService`
+  - `LogisticsProvider` 抽象
+  - `MockLogisticsProvider`
+- 新增环境变量：
+  - `LOGISTICS_PROVIDER=mock`
+- 后台订单新增接口：
+  - `POST /api/admin/orders/:id/logistics-traces/refresh`
+  - 仅允许已发货且存在物流单号的订单刷新物流。
+  - 查询结果写入现有 `OrderLogisticsTrace`。
+  - 按状态、内容、物流单号、发生时间做幂等去重，重复刷新不会插入重复轨迹。
+- `@mall/api-sdk` 新增：
+  - `refreshOrderLogisticsTraces`
+- 管理后台订单页新增：
+  - 展开行“物流轨迹”区域增加“刷新物流”按钮。
+  - 有发货时间和物流单号时可点击。
+- `docs/api-compatibility.md` 补充 P8-07 接口、行为和 provider 边界。
+
+修改文件：
+
+- `apps/server/.env.example`
+- `apps/server/src/modules/config/env.validation.ts`
+- `apps/server/src/modules/logistics/*`
+- `apps/server/src/modules/order/dto/add-order-logistics-trace.dto.ts`
+- `apps/server/src/modules/order/order.module.ts`
+- `apps/server/src/modules/order/order.service.ts`
+- `apps/server/src/modules/admin/admin-order.controller.ts`
+- `packages/api-sdk/src/index.ts`
+- `packages/api-sdk/src/runtime.js`
+- `apps/admin-web/src/api/adminApi.ts`
+- `apps/admin-web/src/pages/OrderPage.tsx`
+- `docs/api-compatibility.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck` 通过。
+- `pnpm --filter @mall/admin-web typecheck` 通过。
+- `pnpm --filter @mall/api-sdk typecheck` 通过。
+
+未执行：
+
+- Docker MySQL / Redis 当前未确认启动，未执行数据库迁移和完整 smoke。
+- 未启动管理后台做浏览器视觉复验。
+- 当前仅支持 mock provider，真实物流服务商签名、查询频控、订阅回调和 raw payload 落库仍未接入。
+
+下一步：
+
+```text
+P8-08：补售后/物流 smoke 脚本并运行三端复验，或选择一个真实物流聚合服务商进入生产联调。
+```
+
+## 2026-06-18 P8-08 售后与物流 smoke 覆盖补强
+
+目标：
+
+- 把 P8-07 新增的物流 provider 刷新入口纳入本地 smoke 回归。
+- 给 P8-06 售后退款链路增加脚本级 smoke 覆盖。
+- 继续复用现有 `pnpm smoke:transaction`，避免维护多套回归入口。
+
+本次完成：
+
+- `smoke-transaction.ts` 新增物流刷新断言：
+  - 后台发货后调用 `refreshOrderLogisticsTraces`。
+  - 断言 mock provider 写入 `PICKED_UP` 和 `IN_TRANSIT` 轨迹。
+  - 再次刷新并断言轨迹数量不变，覆盖幂等去重。
+- `smoke-transaction.ts` 新增售后仅退款独立链路：
+  - 独立创建一笔 smoke 订单。
+  - 完成 mock 微信支付。
+  - 用户创建 `REFUND_ONLY` 售后单。
+  - 后台审核通过。
+  - 后台触发售后退款。
+  - mock 微信退款回调成功。
+  - 断言售后单进入 `COMPLETED`，订单进入 `REFUNDED`，并存在 `REFUND_SUCCESS` 售后日志。
+- `docs/local-regression.md` 同步补充 smoke 覆盖项。
+
+修改文件：
+
+- `apps/server/scripts/smoke-transaction.ts`
+- `docs/local-regression.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck` 通过。
+
+未执行：
+
+- Docker MySQL / Redis 当前未确认启动，未实际运行 `pnpm smoke:transaction`。
+- 未启动管理后台 / 小程序做运行态视觉复验。
+
+下一步：
+
+```text
+P8-09：启动本地依赖和 API，实际运行 pnpm smoke:transaction；或选择真实物流 provider 做联调。
+```
+
+## 2026-06-18 P8-09 本地完整 smoke 运行与迁移修复
+
+目标：
+
+- 启动本地 MySQL / Redis 和 API。
+- 应用最新迁移并刷新种子数据。
+- 实际运行 `pnpm smoke:transaction`，验证 P8-07 / P8-08 新增物流刷新和售后退款 smoke。
+
+本次完成：
+
+- 启动 Docker 依赖：
+  - `private-mall-mysql`
+  - `private-mall-redis`
+- 修复迁移：
+  - `apps/server/prisma/migrations/20260618000200_add_after_sale_return_logistics/migration.sql`
+  - 原迁移使用 PostgreSQL 风格双引号，MySQL 执行失败。
+  - 已改为 MySQL 反引号，并统一使用 `DATETIME(3) NULL`。
+- 修复本地失败迁移状态：
+  - 使用 `prisma migrate resolve --rolled-back 20260618000200_add_after_sale_return_logistics` 标记失败迁移回滚。
+  - 重新执行 `pnpm --filter @mall/server prisma:migrate:deploy` 成功。
+- 刷新种子数据：
+  - `pnpm db:seed` 成功。
+- 启动 API：
+  - `pnpm --filter @mall/server build` 成功。
+  - `pnpm --filter @mall/server start` 成功启动。
+- 运行完整 smoke：
+  - `pnpm smoke:transaction` 通过。
+
+关键 smoke 输出：
+
+```text
+- mock logistics refresh ok
+- after-sale refund-only smoke ok
+Smoke transaction passed.
+```
+
+修改文件：
+
+- `apps/server/prisma/migrations/20260618000200_add_after_sale_return_logistics/migration.sql`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server prisma:generate` 通过。
+- `pnpm --filter @mall/server prisma:migrate:deploy` 通过。
+- `pnpm db:seed` 通过。
+- `pnpm --filter @mall/server build` 通过。
+- `pnpm smoke:transaction` 通过。
+
+注意事项：
+
+- 本轮 Docker 和 `tsx` 相关命令需要本机权限；沙箱内会遇到 Docker daemon permission denied 或 `tsx` IPC pipe `EPERM`。
+- API 服务在 smoke 结束后已手动停止，终端显示 `SIGINT` 属于正常停止。
+
+下一步：
+
+```text
+P8-10：启动后台页面做售后/订单物流视觉复验，或选择真实物流 provider 进入联调设计。
+```
+
+## 2026-06-18 P8-10 后台订单物流与售后视觉复验
+
+目标：
+
+- 启动 API 和管理后台 dev server。
+- 在浏览器中登录后台，复验订单管理页的物流刷新入口。
+- 复验售后管理页的已完成售后详情、退款快照和处理日志。
+
+本次完成：
+
+- 启动 API：
+  - `pnpm --filter @mall/server start`
+  - 健康检查 `GET /api/health` 正常。
+- 启动管理后台：
+  - `pnpm --filter @mall/admin-web dev`
+  - 本地地址：`http://localhost:5173/`
+- 浏览器复验订单管理页：
+  - 清理浏览器旧 token 后重新登录后台。
+  - 订单列表加载正常。
+  - 展开 smoke 订单 `MO20260618154626BVZ8CE`。
+  - 展开详情展示收货信息、商品明细、物流轨迹和退款记录。
+  - “刷新物流”按钮可见。
+  - 点击“刷新物流”后出现成功提示，没有失败提示。
+  - 轨迹表展示 mock provider 的“已揽收”和“运输中”记录。
+- 浏览器复验售后管理页：
+  - 售后列表加载正常。
+  - 展示 smoke 售后单 `AS20260618154626PSRK4X`。
+  - 展开详情展示订单快照、申请信息、退款单号、退款状态、退款金额和时间字段。
+  - 退款状态显示“退款成功”。
+  - 已完成售后不展示“触发退款”按钮。
+  - 处理记录包含 `CREATE`、`APPROVE`、`TRIGGER_REFUND`、`REFUND_SUCCESS`。
+
+发现项：
+
+- 浏览器中残留旧 `admin_access_token` 时，后台会显示 `Invalid admin bearer token`。退出并重新登录后恢复正常。
+- 控制台存在 Ant Design v5 静态 `message` 调用警告：
+
+```text
+Warning: [antd: message] Static function can not consume context like dynamic theme.
+```
+
+该警告不影响本次订单物流和售后页面功能。后续建议单独将后台消息提示改为 AntD `App.useApp()` 上下文方式。
+
+已验证：
+
+- `GET /api/health` 正常。
+- 后台登录成功。
+- 订单物流刷新运行态成功。
+- 售后详情运行态展示正确。
+
+未执行：
+
+- 未做小程序真机 / 微信开发者工具视觉复验。
+- 未修复后台全局静态 message warning。
+
+下一步：
+
+```text
+P8-11：重构后台消息提示为 AntD App.useApp()，或进入真实物流 provider 联调设计。
+```
+
+## 2026-06-18 P8-11 后台消息提示迁移到 AntD App 上下文
+
+目标：
+
+- 修复 P8-10 浏览器复验发现的 Ant Design v5 静态 `message` warning。
+- 保持后台各页面现有成功 / 失败提示行为不变。
+
+本次完成：
+
+- 新增后台消息桥接层：
+  - `apps/admin-web/src/utils/appMessage.ts`
+  - 通过 `bindAppMessage` 保存 `AntdApp.useApp()` 提供的 message 实例。
+  - 页面和 API 错误处理统一调用 `appMessage.success/error`。
+- 调整后台根组件：
+  - `apps/admin-web/src/App.tsx`
+  - 在 `ConfigProvider` 内包裹 AntD `App`。
+  - 新增 `AdminAppContent` 绑定 message 上下文。
+- 替换后台静态 `message` 调用：
+  - `apps/admin-web/src/api/error.ts`
+  - `apps/admin-web/src/pages/LoginPage.tsx`
+  - `apps/admin-web/src/pages/ProductPage.tsx`
+  - `apps/admin-web/src/pages/ProductFormModal.tsx`
+  - `apps/admin-web/src/pages/CategoryPage.tsx`
+  - `apps/admin-web/src/pages/CouponPage.tsx`
+  - `apps/admin-web/src/pages/OrderPage.tsx`
+  - `apps/admin-web/src/pages/AfterSalePage.tsx`
+  - `apps/admin-web/src/pages/SettingPage.tsx`
+- 浏览器复验：
+  - 启动 API 和后台 dev server。
+  - 打开订单管理页。
+  - 展开 smoke 订单并点击“刷新物流”。
+  - 页面成功提示仍正常出现。
+  - 本次触发后的 console error 为空。
+  - 本次触发后的 `[antd: message]` warning 为空。
+
+修复过程注意：
+
+- 机械替换时曾误伤部分 Form rule 的 `message` 字段，已恢复为 `message: ...` 并通过类型检查。
+
+已验证：
+
+- `pnpm --filter @mall/admin-web typecheck` 通过。
+- `pnpm --filter @mall/admin-web build` 通过。
+- `pnpm format:check` 通过。
+- 浏览器运行态刷新物流提示正常，且无新增 AntD message warning。
+
+未执行：
+
+- 未做小程序真机 / 微信开发者工具视觉复验。
+
+下一步：
+
+```text
+P8-12：进入真实物流 provider 联调设计，或补小程序售后详情运行态视觉复验。
+```
+
+## 2026-06-18 P8-12 真实物流 HTTP JSON Provider 骨架
+
+目标：
+
+- 在现有 `mock` 物流 provider 之外，补一个真实联调用的通用 HTTP JSON provider。
+- 先约定内部标准请求 / 响应结构，不绑定具体快递聚合服务商。
+- 让订单业务层继续只依赖 `LogisticsService`，不感知第三方字段、签名或原始状态码。
+
+本次完成：
+
+- 新增服务端 provider：
+  - `apps/server/src/modules/logistics/http-json-logistics.provider.ts`
+- `LogisticsModule` 注册 `HttpJsonLogisticsProvider`。
+- `LogisticsService` 支持：
+  - `LOGISTICS_PROVIDER=mock`
+  - `LOGISTICS_PROVIDER=http-json`
+- `http-json` provider 行为：
+  - 向 `LOGISTICS_HTTP_QUERY_URL` 发送 `POST application/json` 请求。
+  - 可选使用 `LOGISTICS_HTTP_AUTH_TOKEN` 作为 Bearer Token。
+  - 支持 `LOGISTICS_HTTP_TIMEOUT_MS` 查询超时。
+  - 将响应校验并规范化为内部 `LogisticsQueryResult`。
+  - 拒绝空轨迹、非法状态、非法时间和非 2xx 响应。
+- 环境变量校验新增：
+  - `LOGISTICS_PROVIDER=mock|http-json`
+  - `LOGISTICS_HTTP_QUERY_URL`
+  - `LOGISTICS_HTTP_AUTH_TOKEN`
+  - `LOGISTICS_HTTP_TIMEOUT_MS`
+- `.env.example` 补充真实物流 HTTP JSON provider 配置。
+- `docs/api-compatibility.md` 补充 `http-json` provider 请求 / 响应契约。
+
+修改文件：
+
+- `apps/server/.env.example`
+- `apps/server/src/modules/config/env.validation.ts`
+- `apps/server/src/modules/logistics/http-json-logistics.provider.ts`
+- `apps/server/src/modules/logistics/logistics.module.ts`
+- `apps/server/src/modules/logistics/logistics.service.ts`
+- `docs/api-compatibility.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck` 通过。
+
+未执行：
+
+- 未对接真实物流服务商。
+- 未运行 `LOGISTICS_PROVIDER=http-json` 的端到端联调；该模式需要提供可访问的 `LOGISTICS_HTTP_QUERY_URL`。
+
+下一步：
+
+```text
+P8-13：为 http-json provider 补本地 fake endpoint 集成 smoke，或进入小程序售后详情运行态视觉复验。
+```
+
+## 2026-06-18 P8-13 HTTP JSON Provider 本地 Smoke
+
+目标：
+
+- 给 P8-12 新增的 `http-json` 物流 provider 补可重复执行的本地验证。
+- 在没有真实物流服务商、没有数据库、没有启动 Nest API 的情况下，先守住请求 / 响应契约。
+
+本次完成：
+
+- 新增服务端 smoke 脚本：
+  - `apps/server/scripts/smoke-logistics-provider.ts`
+- 新增脚本入口：
+  - `pnpm --filter @mall/server smoke:logistics-provider`
+  - `pnpm smoke:logistics-provider`
+- 脚本会启动本地临时 fake endpoint，并验证：
+  - `POST /query`
+  - `Content-Type: application/json`
+  - `Authorization: Bearer <token>`
+  - 请求体包含物流公司、物流公司编码、物流单号、收货手机号后四位、订单号和售后单号。
+  - 标准响应可归一化为内部物流状态、轨迹和查询时间。
+  - provider 非 2xx 响应会抛出查询失败。
+  - provider 非法响应会抛出查询失败。
+  - 缺少 `LOGISTICS_HTTP_QUERY_URL` 会抛出配置错误。
+- `docs/local-regression.md` 补充物流 provider smoke 使用说明。
+- `docs/api-compatibility.md` 补充本地 fake endpoint smoke 入口。
+
+修改文件：
+
+- `apps/server/package.json`
+- `apps/server/scripts/smoke-logistics-provider.ts`
+- `docs/api-compatibility.md`
+- `docs/local-regression.md`
+- `docs/project-progress.md`
+- `package.json`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck` 通过。
+- `pnpm format:check` 通过。
+
+未执行：
+
+- `pnpm smoke:logistics-provider` 在 Codex 沙箱内触发 `tsx` IPC pipe 权限问题：
+  - `listen EPERM ... /tsx-...pipe`
+  - 已请求提权重跑，但本次被系统用量限制拦截，未能完成运行态 smoke。
+
+下一步：
+
+```text
+P8-14：继续补小程序售后详情运行态视觉复验，或把 http-json provider 接入真实聚合服务的签名适配层。
+```
+
+## 2026-06-18 P8-14 HTTP JSON Provider 可选 HMAC 签名
+
+目标：
+
+- 给 `http-json` 物流 provider 增加真实网关常用的请求签名能力。
+- 不绑定具体物流聚合服务商，保持 provider 仍面向内部标准 JSON 契约。
+
+本次完成：
+
+- `http-json` provider 新增可选配置：
+  - `LOGISTICS_HTTP_SIGNING_SECRET`
+- 配置签名密钥后，请求会附带：
+  - `X-Logistics-Signature-Version: hmac-sha256-v1`
+  - `X-Logistics-Timestamp`
+  - `X-Logistics-Nonce`
+  - `X-Logistics-Signature`
+- 签名算法：
+  - `HMAC-SHA256(secret, "<timestamp>.<nonce>.<raw-json-body>")`
+  - 输出 hex 字符串。
+- `smoke-logistics-provider.ts` 补充签名头断言，覆盖 Bearer Token 和 HMAC 同时开启的场景。
+- `.env.example`、环境变量校验和 API 兼容文档同步更新。
+
+修改文件：
+
+- `apps/server/.env.example`
+- `apps/server/scripts/smoke-logistics-provider.ts`
+- `apps/server/src/modules/config/env.validation.ts`
+- `apps/server/src/modules/logistics/http-json-logistics.provider.ts`
+- `docs/api-compatibility.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck` 通过。
+- `pnpm format:check` 通过。
+
+未执行：
+
+- `pnpm smoke:logistics-provider` 仍需要本机允许 `tsx` IPC pipe 和临时 HTTP 监听。
+
+下一步：
+
+```text
+P8-15：补 http-json provider 的可观测日志 / 错误码映射，或转向小程序售后详情复验。
+```
+
+## 2026-06-18 P8-15 HTTP JSON Provider 错误码与日志
+
+目标：
+
+- 让 `http-json` 物流 provider 的失败原因可观测、可定位。
+- 对外仍保持 HTTP 400 / 503 语义，内部细分错误原因放在 `error.code`。
+- 日志只记录排查必要上下文，不泄露 token、签名密钥、完整物流单号或完整请求体。
+
+本次完成：
+
+- `HttpJsonLogisticsProvider` 新增 Nest Logger。
+- 查询前写入 debug 日志，包含：
+  - `provider`
+  - `endpointHost`
+  - `orderNo`
+  - `afterSaleNo`
+  - `trackingNoTail`
+- provider 返回非 2xx 时写入 warn 日志，并保留 HTTP 状态。
+- 网络错误 / 超时写入 warn 日志，并映射为内部错误码。
+- 错误响应新增内部错误码：
+  - `LOGISTICS_PROVIDER_MISSING_ENDPOINT`
+  - `LOGISTICS_PROVIDER_HTTP_ERROR`
+  - `LOGISTICS_PROVIDER_INVALID_JSON`
+  - `LOGISTICS_PROVIDER_INVALID_STATUS`
+  - `LOGISTICS_PROVIDER_INVALID_TRACE`
+  - `LOGISTICS_PROVIDER_NO_TRACES`
+  - `LOGISTICS_PROVIDER_QUERY_FAILED`
+  - `LOGISTICS_PROVIDER_TIMEOUT`
+- `smoke-logistics-provider.ts` 补充失败分支错误码断言：
+  - 非 2xx 响应
+  - 空轨迹 / 无有效轨迹
+  - 非法 JSON
+  - 缺少 endpoint 配置
+- `docs/api-compatibility.md` 补充错误响应示例和错误码列表。
+
+修改文件：
+
+- `apps/server/scripts/smoke-logistics-provider.ts`
+- `apps/server/src/modules/logistics/http-json-logistics.provider.ts`
+- `docs/api-compatibility.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck` 通过。
+- `pnpm format:check` 通过。
+
+未执行：
+
+- `pnpm smoke:logistics-provider` 仍需要本机允许 `tsx` IPC pipe 和临时 HTTP 监听。
+
+下一步：
+
+```text
+P8-16：补物流 provider 查询频控 / 失败重试策略，或切回小程序售后详情复验。
+```
+
+## 2026-06-18 P8-16 HTTP JSON Provider 失败重试策略
+
+目标：
+
+- 给 `http-json` 物流 provider 增加可配置的轻量失败重试。
+- 只重试临时失败，避免对配置错误、响应契约错误和业务无效响应做无意义放大。
+- 默认不改变现有行为，显式配置后再开启重试。
+
+本次完成：
+
+- 新增环境变量：
+  - `LOGISTICS_HTTP_RETRY_ATTEMPTS`
+  - `LOGISTICS_HTTP_RETRY_DELAY_MS`
+- 默认行为：
+  - `LOGISTICS_HTTP_RETRY_ATTEMPTS=0`
+  - 单次查询，不额外重试。
+- 可重试失败：
+  - `LOGISTICS_PROVIDER_TIMEOUT`
+  - `LOGISTICS_PROVIDER_QUERY_FAILED`
+  - `LOGISTICS_PROVIDER_HTTP_ERROR` 且 HTTP 状态为 `5xx`
+- 不重试失败：
+  - 缺少 endpoint 配置
+  - 非法 JSON
+  - 非法状态
+  - 空轨迹
+  - 非法轨迹
+  - provider `4xx`
+- 每次尝试都会重新生成签名 timestamp / nonce，避免重试复用旧签名。
+- 重试前写入 warn 日志，包含 attempt、nextAttempt、错误码和 delay。
+- `smoke-logistics-provider.ts` 补充：
+  - 默认不重试 503，只发起 1 次请求。
+  - 开启 `LOGISTICS_HTTP_RETRY_ATTEMPTS=2` 后，503 总共发起 3 次请求。
+  - 空轨迹错误不重试。
+- `.env.example`、环境变量校验和 API 兼容文档同步更新。
+
+修改文件：
+
+- `apps/server/.env.example`
+- `apps/server/scripts/smoke-logistics-provider.ts`
+- `apps/server/src/modules/config/env.validation.ts`
+- `apps/server/src/modules/logistics/http-json-logistics.provider.ts`
+- `docs/api-compatibility.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck` 通过。
+- `pnpm format:check` 通过。
+
+未执行：
+
+- `pnpm smoke:logistics-provider` 仍需要本机允许 `tsx` IPC pipe 和临时 HTTP 监听。
+
+下一步：
+
+```text
+P8-17：补物流刷新接口的后台频控 / 按钮冷却，或切回小程序售后详情复验。
+```
+
+## 2026-06-18 P8-17 后台物流刷新接口冷却
+
+目标：
+
+- 给后台“刷新物流”接口增加基础频控，避免同一订单被重复点击或并发点击时连续打到物流 provider。
+- 不引入数据库迁移，先实现单实例进程内保护。
+- 保持本地和生产配置可调。
+
+本次完成：
+
+- `OrderService.refreshLogisticsTracesForAdmin` 在查询 provider 前增加 per-order 冷却检查。
+- 新增进程内冷却 Map：
+  - key：订单 ID
+  - value：冷却截止时间戳
+- 新增环境变量：
+  - `LOGISTICS_REFRESH_COOLDOWN_SECONDS`
+- 默认冷却：
+  - `60` 秒
+- 设置 `LOGISTICS_REFRESH_COOLDOWN_SECONDS=0` 可关闭冷却。
+- 冷却期内重复刷新返回 `429 Too Many Requests`，响应 `error.code` 为：
+  - `LOGISTICS_REFRESH_COOLDOWN`
+- 响应中包含：
+  - `retryAfterSeconds`
+- `.env.example`、环境变量校验和 API 兼容文档同步更新。
+
+实现说明：
+
+- 当前是进程内保护，适合本地和单实例部署。
+- 多实例部署如果需要强一致频控，后续可替换为 Redis 锁或 Redis TTL key。
+- 冷却在发起 provider 查询前预占，能拦截并发重复点击；如果 provider 查询失败，短时间内也会冷却，避免失败时被连续重试打爆。
+
+修改文件：
+
+- `apps/server/.env.example`
+- `apps/server/src/modules/config/env.validation.ts`
+- `apps/server/src/modules/order/order.service.ts`
+- `docs/api-compatibility.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck` 通过。
+- `pnpm format:check` 通过。
+
+未执行：
+
+- 未启动 API 做真实 429 响应验证。
+
+下一步：
+
+```text
+P8-18：后台订单页刷新按钮增加本地冷却展示，或切回小程序售后详情复验。
+```
+
+## 2026-06-18 P8-18 后台刷新物流按钮冷却展示
+
+目标：
+
+- 在 P8-17 服务端刷新冷却基础上，补后台订单页的本地按钮冷却反馈。
+- 减少重复点击，并让管理员能看到剩余等待时间。
+
+本次完成：
+
+- `OrderPage` 新增本地刷新冷却状态：
+  - `orderId -> cooldownUntil`
+- 点击“刷新物流”后立即进入本地 60 秒冷却。
+- 每秒刷新按钮文案：
+  - `刷新物流 59s`
+  - `刷新物流 58s`
+- 冷却期内禁用按钮。
+- 若服务端返回 `LOGISTICS_REFRESH_COOLDOWN`，读取 `retryAfterSeconds` 并校准本地倒计时。
+- 保留原有 `loading` 状态和刷新成功提示。
+
+修改文件：
+
+- `apps/admin-web/src/pages/OrderPage.tsx`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/admin-web typecheck` 通过。
+- `pnpm --filter @mall/admin-web build` 通过。
+- `pnpm format:check` 通过。
+
+未执行：
+
+- 未启动后台页面做浏览器倒计时视觉复验。
+
+下一步：
+
+```text
+P8-19：启动后台页面复验物流刷新冷却，或切回小程序售后详情复验。
+```
+
+## 2026-06-18 P8-19 物流刷新冷却与 Smoke 兼容修正
+
+目标：
+
+- 避免 P8-17 服务端默认冷却破坏现有交易 smoke 中“连续刷新两次验证幂等”的断言。
+- 保持真实物流 provider 的默认保护。
+
+本次完成：
+
+- 服务端冷却默认值改为 provider-aware：
+  - `LOGISTICS_PROVIDER=mock` 且未显式配置冷却时，默认 `0` 秒。
+  - 非 `mock` provider 且未显式配置冷却时，默认 `60` 秒。
+- 显式配置 `LOGISTICS_REFRESH_COOLDOWN_SECONDS` 时优先使用配置值。
+- `.env.example` 将 `LOGISTICS_REFRESH_COOLDOWN_SECONDS` 留空，避免本地 mock smoke 被误开启冷却。
+- `docs/api-compatibility.md` 补充 provider-aware 默认策略。
+
+修改文件：
+
+- `apps/server/.env.example`
+- `apps/server/src/modules/order/order.service.ts`
+- `docs/api-compatibility.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck` 通过。
+- `pnpm format:check` 通过。
+
+未执行：
+
+- 未重新运行 `pnpm smoke:transaction`。
+- 未启动后台页面做冷却倒计时视觉复验。
+
+下一步：
+
+```text
+P8-20：在可运行服务后复验 smoke / 后台冷却；或继续补小程序售后详情复验。
+```
+
+## 2026-06-18 P8-20 后台刷新物流按钮冷却配置化
+
+目标：
+
+- 避免后台按钮本地冷却固定写死 60 秒。
+- 让本地 mock 回归、演示环境和真实 provider 联调可以按场景调整前端冷却。
+
+本次完成：
+
+- 后台订单页新增前端环境变量：
+  - `VITE_LOGISTICS_REFRESH_COOLDOWN_SECONDS`
+- 默认值：
+  - 未配置时仍为 `60` 秒。
+- 设置为 `0` 可关闭前端本地按钮冷却。
+- 非法值会回退到 `60` 秒。
+- 服务端返回 `LOGISTICS_REFRESH_COOLDOWN` 时，仍优先使用 `retryAfterSeconds` 校准倒计时。
+- `docs/api-compatibility.md` 补充后台页面本地冷却说明。
+
+修改文件：
+
+- `apps/admin-web/src/pages/OrderPage.tsx`
+- `docs/api-compatibility.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/admin-web typecheck` 通过。
+- `pnpm --filter @mall/admin-web build` 通过。
+- `pnpm format:check` 通过。
+
+未执行：
+
+- 未启动后台页面做浏览器倒计时视觉复验。
+
+下一步：
+
+```text
+P8-21：在可运行服务后复验 smoke / 后台冷却；或继续补小程序售后详情复验。
+```
+
+## 2026-06-18 P8-21 后台冷却配置预检与本地说明
+
+目标：
+
+- 让 P8-20 新增的前端冷却配置进入部署预检。
+- 在本地回归文档中说明如何关闭后台按钮本地冷却，方便连续复验。
+
+本次完成：
+
+- `deployment-preflight.ts` 新增可选非负整数校验：
+  - `VITE_LOGISTICS_REFRESH_COOLDOWN_SECONDS`
+- 未配置时给出 warn，表示使用应用默认值。
+- 配置为负数或非整数时 fail。
+- `docs/local-regression.md` 补充后台物流刷新冷却说明：
+  - 默认 60 秒本地冷却。
+  - 本地连续复验可设置 `VITE_LOGISTICS_REFRESH_COOLDOWN_SECONDS=0`。
+  - 服务端 mock provider 默认不启用冷却，避免影响交易 smoke 的连续刷新幂等断言。
+
+修改文件：
+
+- `apps/server/scripts/deployment-preflight.ts`
+- `docs/local-regression.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck` 通过。
+- `pnpm format:check` 通过。
+
+未执行：
+
+- 未运行 production preflight。
+
+下一步：
+
+```text
+P8-22：在可运行服务后复验 smoke / 后台冷却；或继续补小程序售后详情复验。
+```
+
+## 2026-06-18 P8-22 小程序售后凭证链接与详情展示
+
+目标：
+
+- 在 Docker / API 运行态复验暂时受阻时，按顺序补小程序售后详情相关缺口。
+- 使用后端已存在的 `evidenceImageUrls` 字段，让用户申请售后时能提交凭证，并能在详情页查看。
+
+本次完成：
+
+- 小程序售后申请页新增“凭证图片链接”输入：
+  - 每行或逗号分隔一个图片链接。
+  - 最多 6 张。
+  - 提交时写入 `evidenceImageUrls`。
+- 小程序售后详情页新增凭证图片展示：
+  - 缩略图网格。
+  - 点击图片调用 `Taro.previewImage` 预览。
+- 样式补充：
+  - 申请页凭证输入提示。
+  - 详情页凭证缩略图和序号角标。
+
+修改文件：
+
+- `apps/miniapp/src/pages/after-sale/apply.tsx`
+- `apps/miniapp/src/pages/after-sale/apply.css`
+- `apps/miniapp/src/pages/after-sale/detail.tsx`
+- `apps/miniapp/src/pages/after-sale/detail.css`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/miniapp typecheck` 通过。
+- `pnpm format:check` 通过。
+
+未执行：
+
+- Docker daemon 未就绪，未运行 `pnpm smoke:transaction`。
+- 未启动微信开发者工具 / 小程序运行态复验。
+
+下一步：
+
+```text
+P8-23：继续小程序售后详情运行态复验，或补用户侧售后列表入口。
+```
+
+## 2026-06-18 P8-23 小程序用户侧售后列表入口
+
+目标：
+
+- 在小程序“我的”页补用户侧售后记录入口。
+- 让用户不必从订单详情逐单查找，也能集中查看售后申请和处理进度。
+
+本次完成：
+
+- 新增小程序售后列表页：
+  - 支持全部、待审核、待退货、退款中、已完成状态筛选。
+  - 支持分页加载、触底加载更多、下拉刷新。
+  - 展示售后单号、状态、申请时间、售后类型、申请金额、关联订单和申请原因。
+  - 根据状态展示“查看进度 / 填写物流 / 查看详情”主操作。
+  - 支持跳转售后详情和关联订单详情。
+- “我的”页菜单新增“售后记录”入口。
+- 小程序全局页面路由新增：
+  - `pages/after-sale/list`
+
+修改文件：
+
+- `apps/miniapp/src/app.config.ts`
+- `apps/miniapp/src/pages/user/index.tsx`
+- `apps/miniapp/src/pages/after-sale/list.config.ts`
+- `apps/miniapp/src/pages/after-sale/list.tsx`
+- `apps/miniapp/src/pages/after-sale/list.css`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/miniapp typecheck` 通过。
+- `pnpm format:check` 通过。
+
+未执行：
+
+- Docker daemon 未就绪，未运行 `pnpm smoke:transaction`。
+- 未启动微信开发者工具 / 小程序运行态复验。
+
+下一步：
+
+```text
+P8-24：继续小程序售后列表 / 详情运行态复验；若 Docker 可用，回补交易 smoke 与后台物流冷却复验。
+```
+
+## 2026-06-18 P8-24 小程序售后构建与运行态回归补验
+
+目标：
+
+- 回补 P8-22 / P8-23 小程序售后申请、详情、列表的构建级验证。
+- Docker 可用后，回补交易 smoke 和后台物流刷新冷却运行态复验。
+
+本次完成：
+
+- 启动 Docker Desktop 后确认 Docker daemon 可用。
+- 启动 / 确认本地 MySQL、Redis：
+  - `private-mall-mysql`
+  - `private-mall-redis`
+- 迁移状态确认：
+  - `pnpm --filter @mall/server prisma:migrate:deploy`
+  - 当前 19 个迁移均已应用，无待执行迁移。
+- 刷新种子数据：
+  - `pnpm --filter @mall/server db:seed`
+- 启动 API 并健康检查：
+  - `GET /api/health` 正常。
+- 完整交易 smoke 通过：
+  - 下单、优惠券锁定/释放、积分抵扣、支付、发货、自动物流轨迹。
+  - mock 物流刷新幂等。
+  - 售后仅退款链路。
+  - 微信退款回调和积分退款扣减。
+- 小程序 weapp 构建通过：
+  - `pnpm --filter @mall/miniapp build:weapp`
+  - 新增 `pages/after-sale/list` 已进入 Taro 构建。
+- 后台订单页运行态复验：
+  - 重新登录后台。
+  - 展开 smoke 订单 `MO20260618234051VVOCEX`。
+  - 点击“刷新物流”成功。
+  - 成功提示出现。
+  - 按钮进入本地冷却：
+    - 初始显示 `刷新物流 60s`
+    - 冷却期内禁用。
+    - 随后倒计时递减。
+  - 浏览器 console error 为 0。
+  - 未再出现 AntD `[antd: message]` warning。
+- 小程序售后列表接口检查：
+  - mock 用户登录成功。
+  - `GET /api/after-sales?page=1&pageSize=5` 返回分页数据。
+  - 当前返回 `total=2`，最新售后单 `AS202606182340522ST8Y2`，状态 `COMPLETED`，关联订单 `MO20260618234052ZC4PB5`。
+
+修正记录：
+
+- Prisma 命令在 Codex 沙箱内会因访问用户缓存目录出现 schema engine `EPERM`，提权后迁移状态正常。
+- `tsx` 脚本在沙箱内会因 IPC pipe `EPERM` 失败，种子和 smoke 均使用提权运行。
+- Taro weapp 构建在沙箱内触发底层 system-configuration panic 并卡住，提权后构建通过。
+- 修正 P8-22 / P8-23 进度记录中的验证项重复 / 缺失。
+
+已验证：
+
+- `docker info` 通过。
+- `pnpm db:up` 通过。
+- `pnpm --filter @mall/server prisma:migrate:deploy` 通过。
+- `pnpm --filter @mall/server db:seed` 通过。
+- `pnpm --filter @mall/server build` 通过。
+- `GET /api/health` 正常。
+- `pnpm smoke:transaction` 通过。
+- `pnpm --filter @mall/miniapp build:weapp` 通过。
+- 后台订单页刷新物流冷却浏览器复验通过。
+- 小程序售后列表 API 分页检查通过。
+
+未执行：
+
+- 未启动微信开发者工具做真机 / 模拟器视觉复验。
+
+下一步：
+
+```text
+P8-25：做微信开发者工具内的小程序售后列表 / 详情视觉复验；或继续完善售后列表筛选与详情返回联动。
+```
+
+## 2026-06-18 P8-25 小程序售后列表筛选与详情联动
+
+目标：
+
+- 在无法直接自动化微信开发者工具视觉复验时，继续补小程序售后列表 / 详情的交互闭环。
+- 让售后列表筛选更完整，并让详情页操作后的状态能同步回列表页。
+
+本次完成：
+
+- 新增售后事件模块：
+  - `AFTER_SALE_LIST_UPDATE_EVENT`
+  - `emitAfterSaleListUpdate`
+- 售后申请页创建成功后广播最新售后单。
+- 售后详情页操作成功后广播最新售后单：
+  - 取消售后。
+  - 提交退货物流。
+- 售后列表页监听售后更新事件：
+  - 当前筛选命中时原地替换或插入。
+  - 当前筛选不再命中时从列表移除。
+  - 同步维护当前列表总数。
+  - 事件已处理时跳过下一次 `useDidShow` 的重复静默刷新。
+- 售后列表新增类型筛选：
+  - 全部类型。
+  - 仅退款。
+  - 退货退款。
+- 售后列表查询参数同步带上 `type`。
+- 售后详情页新增底部双入口：
+  - “售后记录”：从列表进入时返回列表，否则跳转售后记录页。
+  - “订单详情”：跳回关联订单详情。
+
+修改文件：
+
+- `apps/miniapp/src/pages/after-sale/events.ts`
+- `apps/miniapp/src/pages/after-sale/apply.tsx`
+- `apps/miniapp/src/pages/after-sale/detail.tsx`
+- `apps/miniapp/src/pages/after-sale/detail.css`
+- `apps/miniapp/src/pages/after-sale/list.tsx`
+- `apps/miniapp/src/pages/after-sale/list.css`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/miniapp typecheck` 通过。
+- `pnpm format:check` 通过。
+- `pnpm --filter @mall/miniapp build:weapp` 通过。
+
+未执行：
+
+- 未启动微信开发者工具做真机 / 模拟器视觉复验。
+
+下一步：
+
+```text
+P8-26：做微信开发者工具内小程序售后视觉复验；或补售后列表状态分组计数 / 待处理快捷入口。
+```
+
+## 2026-06-19 P8-26 小程序售后状态计数与待处理入口
+
+目标：
+
+- 在仍未直接进入微信开发者工具视觉复验的情况下，继续增强小程序售后列表的可用性。
+- 给用户提供状态分组数量和“待退货”快捷处理入口。
+
+本次完成：
+
+- 售后列表新增状态分组计数：
+  - 全部售后。
+  - 待审核。
+  - 待退货。
+  - 退款中。
+  - 状态 tab 文案同步展示数量。
+- 状态计数会跟随当前售后类型筛选刷新：
+  - 全部类型。
+  - 仅退款。
+  - 退货退款。
+- 售后列表顶部新增状态概览卡片：
+  - 展示关键状态数量。
+  - “待退货”存在记录时高亮，并显示“去处理”。
+  - 点击概览卡片可直接切换对应状态筛选。
+- 手动刷新、下拉刷新、类型切换、售后详情事件回写时，同步刷新状态计数。
+
+修改文件：
+
+- `apps/miniapp/src/pages/after-sale/list.tsx`
+- `apps/miniapp/src/pages/after-sale/list.css`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/miniapp typecheck` 通过。
+- `pnpm format:check` 通过。
+- `pnpm --filter @mall/miniapp build:weapp` 通过。
+
+未执行：
+
+- 未启动微信开发者工具做真机 / 模拟器视觉复验。
+
+下一步：
+
+```text
+P8-27：做微信开发者工具内小程序售后视觉复验；或补售后列表计数接口聚合，减少前端多次请求。
+```
+
+## 2026-06-19 P8-27 售后列表计数聚合接口
+
+目标：
+
+- 减少小程序售后列表状态计数的前端多次请求。
+- 保留现有分页列表接口，只把状态 tab / 概览卡片计数切换为单次聚合查询。
+
+本次完成：
+
+- 新增用户侧售后计数聚合接口：
+  - `GET /api/after-sales/summary`
+  - 支持按 `type` 和 `orderId` 筛选。
+  - 一次返回当前用户售后总数和各状态数量。
+- 后端售后服务新增 summary 聚合：
+  - 使用 `count + groupBy` 事务查询。
+  - 对所有 `AfterSaleStatus` 返回稳定计数，缺失状态返回 `0`。
+- 共享类型和 SDK 新增：
+  - `AfterSaleSummary`
+  - `AfterSaleStatusCount`
+  - `UserAfterSaleSummaryQuery`
+  - `fetchAfterSaleSummary`
+- 小程序售后列表计数加载优化：
+  - 原先状态计数需要并发请求 5 次 `GET /api/after-sales?pageSize=1`。
+  - 现在改为 1 次 `GET /api/after-sales/summary`。
+  - 现有状态 tab、顶部概览、类型筛选和详情事件回写逻辑保持兼容。
+- 更新接口兼容文档。
+
+修改文件：
+
+- `apps/server/src/modules/after-sale/after-sale.controller.ts`
+- `apps/server/src/modules/after-sale/after-sale.service.ts`
+- `apps/server/src/modules/after-sale/dto/after-sale-response.dto.ts`
+- `apps/server/src/modules/after-sale/dto/query-after-sales.dto.ts`
+- `packages/shared-types/src/index.ts`
+- `packages/api-sdk/src/index.ts`
+- `packages/api-sdk/src/runtime.js`
+- `apps/miniapp/src/api/orderApi.ts`
+- `apps/miniapp/src/api/types.ts`
+- `apps/miniapp/src/pages/after-sale/list.tsx`
+- `docs/api-compatibility.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck`
+- `pnpm --filter @mall/api-sdk typecheck`
+- `pnpm --filter @mall/shared-types typecheck`
+- `pnpm --filter @mall/miniapp typecheck`
+- `pnpm format:check`
+- `pnpm --filter @mall/server build`
+- `pnpm --filter @mall/miniapp build:weapp`
+
+修正记录：
+
+- 首次实现时 Prisma `groupBy` 类型检查要求显式 `orderBy`，并且 `_count` 需要防御式窄化，已修正。
+- Taro weapp 构建在沙箱内再次触发底层 `system-configuration` panic 并卡住；中断后使用提权命令重跑通过。
+
+未执行：
+
+- 本地 `http://localhost:3000/api/health` 当前不可连接，未补 summary 接口运行态检查。
+- 未启动微信开发者工具做真机 / 模拟器视觉复验。
+
+下一步：
+
+```text
+P8-28：若本地服务可用，补售后 summary 接口运行态检查；或继续微信开发者工具内小程序售后视觉复验。
+```
+
+## 2026-06-19 P8-28 售后 Summary 运行态 Smoke 覆盖
+
+目标：
+
+- 补上 P8-27 售后 summary 聚合接口的运行态检查。
+- 让 summary 接口跟随完整交易 smoke 回归，避免只靠手动接口验证。
+
+本次完成：
+
+- `smoke-transaction.ts` 售后仅退款链路新增 summary 断言：
+  - 创建售后后，按 `orderId` 查询 summary，确认 `REQUESTED=1`。
+  - 后台审核通过后，确认 `APPROVED=1`。
+  - 后台触发退款后，确认 `REFUNDING=1`。
+  - 微信退款回调完成后，确认 `COMPLETED=1`。
+  - 同时确认该 smoke 订单维度下其它售后状态计数为 `0`。
+- 本地回归文档补充售后 summary smoke 覆盖项。
+- 启动本地运行态依赖并完成完整 smoke：
+  - MySQL / Redis Docker 容器已运行。
+  - 数据库迁移无待应用项。
+  - 种子数据刷新成功。
+  - API 服务启动成功，`/api/after-sales/summary` 路由已映射。
+
+关键 smoke 输出：
+
+```text
+- after-sale summary status counts ok
+- after-sale refund-only smoke ok: AS20260619085629E19W56
+Smoke transaction passed.
+```
+
+修改文件：
+
+- `apps/server/scripts/smoke-transaction.ts`
+- `docs/local-regression.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck`
+- `pnpm --filter @mall/server build`
+- `pnpm format:check`
+- `pnpm db:up`
+- `pnpm --filter @mall/server prisma:migrate:deploy`
+- `pnpm --filter @mall/server db:seed`
+- `GET /api/health`
+- `pnpm smoke:transaction`
+
+修正记录：
+
+- `pnpm db:up` 在沙箱内无法访问 Docker socket，使用提权命令后容器正常运行。
+- Prisma migrate 在沙箱内仍会触发 schema engine 错误，提权后确认无待应用迁移。
+- `tsx` seed / smoke 在沙箱内会因 IPC pipe `EPERM` 失败，使用提权命令执行通过。
+
+未执行：
+
+- 未启动微信开发者工具做小程序真机 / 模拟器视觉复验。
+
+下一步：
+
+```text
+P8-29：继续微信开发者工具内小程序售后列表 / 详情视觉复验；或补售后 summary Swagger 契约断言。
+```
+
+## 2026-06-19 P8-29 售后 Summary Swagger 契约断言
+
+目标：
+
+- 把 P8-27 新增的售后 summary 聚合接口纳入 Swagger 契约 smoke。
+- 避免接口可用但 `/docs-json` 文档缺字段、缺参数或响应 schema 断链。
+
+本次完成：
+
+- `smoke-transaction.ts` 将 `checkSwaggerOrderPagination` 扩展为 `checkSwaggerContracts`。
+- 保留用户订单分页 Swagger 断言：
+  - `OrderListResultDto` 包含 `items`、`total`、`page`、`pageSize`。
+  - `GET /api/orders` 文档包含 `page`、`pageSize` 参数。
+  - 响应引用 `OrderListResultDto`。
+- 新增售后 summary Swagger 断言：
+  - `GET /api/after-sales/summary` 文档存在。
+  - 查询参数包含 `orderId` 和 `type`。
+  - 响应引用 `AfterSaleSummaryResponseDto`。
+  - `AfterSaleSummaryResponseDto` 包含 `total` 和 `statusCounts`。
+  - `AfterSaleStatusCountDto` 包含 `status` 和 `count`。
+- 本地回归文档补充 Swagger 中售后 summary 聚合接口响应文档覆盖项。
+
+关键 smoke 输出：
+
+```text
+- swagger contract ok
+- after-sale summary status counts ok
+Smoke transaction passed.
+```
+
+修改文件：
+
+- `apps/server/scripts/smoke-transaction.ts`
+- `docs/local-regression.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm --filter @mall/server typecheck`
+- `pnpm --filter @mall/server build`
+- `pnpm format:check`
+- `pnpm smoke:transaction`
+
+未执行：
+
+- 未启动微信开发者工具做小程序真机 / 模拟器视觉复验。
+
+下一步：
+
+```text
+P8-30：继续微信开发者工具内小程序售后列表 / 详情视觉复验；或整理 P8 售后 / 物流阶段收口清单。
+```
+
+## 2026-06-19 P8-30 售后与物流阶段收口清单
+
+目标：
+
+- 汇总 P8 售后 / 物流增强阶段的当前能力、回归覆盖和真实环境依赖。
+- 把“本地已闭环”和“仍需真实环境 / 后续阶段处理”的事项分清楚，方便进入 P9 或生产联调准备。
+
+本次完成：
+
+- 新增 P8 收口文档：
+  - `docs/p8-after-sale-logistics-closure.md`
+- 收口文档明确结论：
+  - P8 已完成售后单模型、用户侧售后申请 / 详情 / 列表、后台售后处理、售后退款接入、退货物流填写、物流 provider 骨架和完整 smoke 回归的本地闭环。
+  - 当前真实物流能力是 provider 适配层和 `http-json` 契约骨架，不等同于已经接入真实快递服务商。
+  - 小程序售后页面已通过类型检查和 weapp 构建，但仍未完成微信开发者工具 / 真机视觉复验。
+- 收口文档梳理已具备能力：
+  - 售后单数据模型和状态机。
+  - 用户侧申请、取消、填写退货物流、详情和列表。
+  - 售后 summary 聚合和待处理入口。
+  - 后台售后审核、确认收货、触发退款和日志。
+  - mock / `http-json` 物流 provider、HMAC、错误码、重试和本地 smoke。
+  - 后台物流刷新冷却和按钮倒计时。
+  - Swagger 契约保护。
+- 收口文档列出明确延后事项：
+  - 微信开发者工具售后视觉复验。
+  - 真实物流服务商接入。
+  - 物流订阅 / 回调。
+  - 退货物流真实查询。
+  - 换货 / 维修。
+  - 单品级售后。
+  - 多包裹 / 拆单。
+  - 多实例物流刷新强一致频控。
+  - raw payload 存档策略。
+  - 售后 SLA / 超时提醒。
+  - 售后客服协商 / 留言。
+  - E2E 视觉自动化。
+- 收口文档列出真实环境依赖：
+  - 微信开发者工具 / 真机售后视觉复验。
+  - 真实微信登录、支付、退款。
+  - 真实物流服务商 API、签名、限流、回调和异常映射。
+  - 生产 HTTPS 域名、小程序 request 合法域名、支付回调地址和商户证书路径。
+
+修改文件：
+
+- `docs/p8-after-sale-logistics-closure.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm format:check`
+
+未执行：
+
+- 未启动 API 或微信开发者工具。
+- 未重新运行 `pnpm smoke:transaction`，本轮只整理收口文档；P8-29 已完成最近一次完整 smoke。
+
+下一步：
+
+```text
+P9-01：整理真实微信登录 / 支付 / 退款 / 物流 provider 的联调环境清单，并选择真实物流服务商。
+```
+
+备选：
+
+```text
+P8-31：在微信开发者工具中复验小程序售后申请、详情、列表、summary 计数和待退货快捷入口。
+```
+
+后续专项任务：
+
+```text
+PX-Storage-01：抽象上传存储层，先保留 local 实现，为对象存储 / 文件服务器接入做准备。
+PX-Storage-02：接入对象存储或独立文件服务器，新上传商品图片不再落到后端本地 uploads 目录。
+PX-Storage-03：迁移历史 /uploads/... 图片到远程存储，并更新数据库 URL。
+```
+
+背景：
+
+- 当前商品图片和上传图片默认落在后端本地目录，适合 MVP 和本地开发。
+- 后期生产运行时，本地 `uploads` 目录会持续变大，且多实例、容器重建、备份和 CDN 都不方便。
+- 当前数据库保存图片 URL，后续迁移重点在上传模块、存储 provider 和历史 URL 迁移脚本，前端展示逻辑可以保持基本不变。
+
+## 2026-06-22 P8-31 微信开发者工具售后视觉复验
+
+目标：
+
+- 在微信开发者工具中复验小程序售后申请、详情、列表、summary 计数和待退货快捷入口。
+- 对待退货物流提交链路做一次真实页面交互验证。
+
+本次完成：
+
+- 将小程序项目 AppID 从游客模式切换为当前微信小程序 AppID，并通过稳定的 `apps/miniapp` 项目根目录打开开发者工具。
+- 清理 `dist` 后执行一次性 weapp 构建，未再出现此前的 `Maximum call stack size exceeded`。
+- 使用微信开发者工具自动化实例复验售后列表：
+  - `summary` 正确展示全部、待审核、待退货、退款中、已完成计数。
+  - 状态筛选和售后类型筛选正常。
+  - 待退货卡片展示“去处理”和“填写物流”快捷入口。
+  - 售后列表、空状态和分页尾部布局正常。
+- 复验售后详情：
+  - 售后类型、申请金额、原因、补充说明、凭证图片数量、商家备注、订单信息和处理日志正常展示。
+  - 待退货状态正确展示物流公司、物流单号和退货备注输入项。
+- 复验售后申请页：
+  - 订单信息、仅退款 / 退货退款切换、申请原因、金额、补充说明、凭证链接和提交按钮正常展示。
+- 提交测试退货物流后，售后状态从 `WAIT_BUYER_RETURN` 推进为 `BUYER_RETURNED`，详情显示物流信息和 `SUBMIT_RETURN_LOGISTICS` 日志。
+- 微信头像 URL 在小程序端统一把 `http://` 规范为 `https://`，消除新版基础库的头像 HTTP 协议警告。
+
+验收数据：
+
+```text
+售后列表：全部 6 / 待退货 1 / 已完成 5
+待退货售后：AS20260622092040H2BM9X
+退货物流：顺丰速运 SF1782091603301
+提交后状态：BUYER_RETURNED
+```
+
+修改文件：
+
+- `apps/miniapp/project.config.json`
+- `apps/miniapp/src/lib/wechatLogin.ts`
+- `apps/miniapp/src/pages/user/index.tsx`
+- `docs/p8-after-sale-logistics-closure.md`
+- `docs/project-progress.md`
+
+已验证：
+
+- `pnpm db:up`
+- `pnpm --filter @mall/server prisma:migrate:deploy`
+- `pnpm --filter @mall/server build`
+- `GET /api/health`
+- `pnpm --filter @mall/server smoke:transaction`
+- `TARO_APP_API_BASE_URL=http://192.168.99.176:3000 pnpm --filter @mall/miniapp build:weapp`
+- `pnpm --filter @mall/miniapp typecheck`
+- 微信开发者工具模拟器与自动化页面复验
+
+剩余外部环境项：
+
+- 微信真机仍需使用 HTTPS API / 图片域名完成最终验收；本地 LAN HTTP 图片在新版基础库中会给出协议警告。
+- 数据库中遗留的 `https://example.com/cream-main-new.png` 测试图片返回 404，需要后续清理或迁移到文件服务器。
+- 微信开发者工具偶发底层 `navigateTo timeout`，自动化直达页面和业务接口均正常；未复现调用栈溢出。
+
+下一步：
+
+```text
+P9-01：整理真实微信登录 / 支付 / 退款 / 物流 provider 的联调环境清单，并选择真实物流服务商。
+```

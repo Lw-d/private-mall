@@ -1,9 +1,11 @@
-import { Button, Image, Text, View } from '@tarojs/components';
+import { Button, Image, ScrollView, Text, View } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { useMemo, useState } from 'react';
 
 import {
+  clearCart,
   fetchCart,
+  removeCheckedCartItems,
   removeCartItem,
   updateCartItemChecked,
   updateCartItemQuantity,
@@ -42,6 +44,7 @@ export default function CartPage() {
   const accessToken = useSessionStore((state) => state.accessToken);
   const [cart, setCart] = useState<Cart>();
   const [loading, setLoading] = useState(false);
+  const [batchOperating, setBatchOperating] = useState(false);
   const [operatingSkuId, setOperatingSkuId] = useState<string>();
 
   const checkedAmount = useMemo(() => getCheckedAmount(cart?.items ?? []), [cart?.items]);
@@ -116,6 +119,57 @@ export default function CartPage() {
     }
   };
 
+  const deleteCheckedItems = async () => {
+    if (!cart?.summary.checkedCount) {
+      void Taro.showToast({ title: '请先选择商品', icon: 'none' });
+      return;
+    }
+
+    const result = await Taro.showModal({
+      title: '批量删除',
+      content: `确认删除已选的 ${cart.summary.checkedCount} 个商品？`,
+      confirmText: '删除',
+      confirmColor: '#dc2626',
+    });
+
+    if (!result.confirm) {
+      return;
+    }
+
+    setBatchOperating(true);
+    try {
+      replaceCart(await removeCheckedCartItems());
+      void Taro.showToast({ title: '已删除', icon: 'success' });
+    } catch (error) {
+      showApiError(error, '批量删除失败');
+    } finally {
+      setBatchOperating(false);
+    }
+  };
+
+  const clearAllCartItems = async () => {
+    const result = await Taro.showModal({
+      title: '清空购物车',
+      content: '确认清空购物车内所有商品？',
+      confirmText: '清空',
+      confirmColor: '#dc2626',
+    });
+
+    if (!result.confirm) {
+      return;
+    }
+
+    setBatchOperating(true);
+    try {
+      replaceCart(await clearCart());
+      void Taro.showToast({ title: '已清空', icon: 'success' });
+    } catch (error) {
+      showApiError(error, '清空失败');
+    } finally {
+      setBatchOperating(false);
+    }
+  };
+
   const openProduct = (item: CartItem) => {
     if (!item.product?.id) {
       return;
@@ -169,8 +223,27 @@ export default function CartPage() {
   }
 
   return (
-    <PageShell>
-      <View className="cart-list">
+    <PageShell className="cart-page-shell">
+      <View className="cart-actions">
+        <View className="cart-actions-buttons">
+          <Button
+            className="cart-action-button"
+            disabled={batchOperating || cart.summary.checkedCount === 0}
+            onClick={() => void deleteCheckedItems()}
+          >
+            删除已选
+          </Button>
+          <Button
+            className="cart-action-button danger"
+            disabled={batchOperating || cart.items.length === 0}
+            onClick={() => void clearAllCartItems()}
+          >
+            清空
+          </Button>
+        </View>
+      </View>
+
+      <ScrollView className="cart-list" scrollY>
         {cart.items.map((item) => {
           const imageUrl = resolveAssetUrl(item.product?.mainImage);
           const isOperating = operatingSkuId === item.skuId;
@@ -231,7 +304,7 @@ export default function CartPage() {
             </View>
           );
         })}
-      </View>
+      </ScrollView>
 
       <View className="cart-summary">
         <View>

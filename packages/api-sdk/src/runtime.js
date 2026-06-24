@@ -130,6 +130,14 @@ export function createAdminApi(client) {
       return client.request(withQuery('/api/admin/products', params));
     },
 
+    fetchHomeBanners() {
+      return client.request('/api/admin/products/home-banners');
+    },
+
+    updateHomeBanners(input) {
+      return client.request('/api/admin/products/home-banners', jsonRequest('PATCH', input));
+    },
+
     createProduct(input) {
       return client.request('/api/admin/products', jsonRequest('POST', input));
     },
@@ -170,6 +178,12 @@ export function createAdminApi(client) {
 
     addOrderLogisticsTrace(id, input) {
       return client.request(`/api/admin/orders/${id}/logistics-traces`, jsonRequest('POST', input));
+    },
+
+    refreshOrderLogisticsTraces(id) {
+      return client.request(`/api/admin/orders/${id}/logistics-traces/refresh`, {
+        method: 'POST',
+      });
     },
 
     updateRefundStatus(id, input) {
@@ -263,6 +277,10 @@ export function createMiniappApi(client) {
       return client.request(withQuery('/api/products', query));
     },
 
+    fetchHomeBanners() {
+      return client.request('/api/products/home-banners');
+    },
+
     fetchProductDetail(id) {
       return client.request(`/api/products/${id}`);
     },
@@ -305,6 +323,14 @@ export function createMiniappApi(client) {
       return client.request(`/api/cart/items/${skuId}`, { method: 'DELETE' });
     },
 
+    removeCheckedCartItems() {
+      return client.request('/api/cart/items/checked', { method: 'DELETE' });
+    },
+
+    clearCart() {
+      return client.request('/api/cart/items', { method: 'DELETE' });
+    },
+
     createOrderFromCart(input = {}) {
       return client.request('/api/orders', dataRequest('POST', input));
     },
@@ -344,6 +370,10 @@ export function createMiniappApi(client) {
 
     fetchAfterSales(query = {}) {
       return client.request(withQuery('/api/after-sales', query));
+    },
+
+    fetchAfterSaleSummary(query = {}) {
+      return client.request(withQuery('/api/after-sales/summary', query));
     },
 
     fetchAfterSaleDetail(id) {

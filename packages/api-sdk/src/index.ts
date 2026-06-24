@@ -10,6 +10,7 @@ type AdminUser = import('@mall/shared-types').AdminUser;
 type AdminUserQuery = import('@mall/shared-types').AdminUserQuery;
 type AfterSale = import('@mall/shared-types').AfterSale;
 type AfterSaleListResult = import('@mall/shared-types').AfterSaleListResult;
+type AfterSaleSummary = import('@mall/shared-types').AfterSaleSummary;
 type ApproveAfterSaleInput = import('@mall/shared-types').ApproveAfterSaleInput;
 type CancelOrderInput = import('@mall/shared-types').CancelOrderInput;
 type Cart = import('@mall/shared-types').Cart;
@@ -24,6 +25,7 @@ type CreateAfterSaleInput = import('@mall/shared-types').CreateAfterSaleInput;
 type CreateOrderInput = import('@mall/shared-types').CreateOrderInput;
 type CreateRefundInput = import('@mall/shared-types').CreateRefundInput;
 type DashboardOverview = import('@mall/shared-types').DashboardOverview;
+type HomeBanner = import('@mall/shared-types').HomeBanner;
 type MiniappLoginResult = import('@mall/shared-types').MiniappLoginResult;
 type MiniappUser = import('@mall/shared-types').MiniappUser;
 type Order = import('@mall/shared-types').Order;
@@ -42,11 +44,13 @@ type UpdateAddressInput = import('@mall/shared-types').UpdateAddressInput;
 type UpdateCategoryInput = import('@mall/shared-types').UpdateCategoryInput;
 type UpdateCartItemCheckedInput = import('@mall/shared-types').UpdateCartItemCheckedInput;
 type UpdateCartItemInput = import('@mall/shared-types').UpdateCartItemInput;
+type UpdateHomeBannersInput = import('@mall/shared-types').UpdateHomeBannersInput;
 type UpdatePointRedeemRulesInput = import('@mall/shared-types').UpdatePointRedeemRulesInput;
 type UpdateRefundStatusInput = import('@mall/shared-types').UpdateRefundStatusInput;
 type UploadResult = import('@mall/shared-types').UploadResult;
 type UserAddress = import('@mall/shared-types').UserAddress;
 type UserAfterSaleQuery = import('@mall/shared-types').UserAfterSaleQuery;
+type UserAfterSaleSummaryQuery = import('@mall/shared-types').UserAfterSaleSummaryQuery;
 type UserCoupon = import('@mall/shared-types').UserCoupon;
 type UserOrderQuery = import('@mall/shared-types').UserOrderQuery;
 type WechatNotifyInput = import('@mall/shared-types').WechatNotifyInput;
@@ -237,6 +241,17 @@ export function createAdminApi(client: FetchApiRequester) {
       return client.request<Product[]>(withQuery('/api/admin/products', params));
     },
 
+    fetchHomeBanners() {
+      return client.request<HomeBanner[]>('/api/admin/products/home-banners');
+    },
+
+    updateHomeBanners(input: UpdateHomeBannersInput) {
+      return client.request<HomeBanner[]>(
+        '/api/admin/products/home-banners',
+        jsonRequest('PATCH', input),
+      );
+    },
+
     createProduct(input: ProductInput) {
       return client.request<Product>('/api/admin/products', jsonRequest('POST', input));
     },
@@ -283,6 +298,12 @@ export function createAdminApi(client: FetchApiRequester) {
         `/api/admin/orders/${id}/logistics-traces`,
         jsonRequest('POST', input),
       );
+    },
+
+    refreshOrderLogisticsTraces(id: string) {
+      return client.request<Order>(`/api/admin/orders/${id}/logistics-traces/refresh`, {
+        method: 'POST',
+      });
     },
 
     updateRefundStatus(id: string, input: UpdateRefundStatusInput) {
@@ -387,6 +408,10 @@ export function createMiniappApi(client: DataApiRequester) {
       return client.request<Product[]>(withQuery('/api/products', query));
     },
 
+    fetchHomeBanners() {
+      return client.request<HomeBanner[]>('/api/products/home-banners');
+    },
+
     fetchProductDetail(id: string) {
       return client.request<Product>(`/api/products/${id}`);
     },
@@ -429,6 +454,14 @@ export function createMiniappApi(client: DataApiRequester) {
 
     removeCartItem(skuId: string) {
       return client.request<Cart>(`/api/cart/items/${skuId}`, { method: 'DELETE' });
+    },
+
+    removeCheckedCartItems() {
+      return client.request<Cart>('/api/cart/items/checked', { method: 'DELETE' });
+    },
+
+    clearCart() {
+      return client.request<Cart>('/api/cart/items', { method: 'DELETE' });
     },
 
     createOrderFromCart(input: CreateOrderInput = {}) {
@@ -476,6 +509,10 @@ export function createMiniappApi(client: DataApiRequester) {
 
     fetchAfterSales(query: UserAfterSaleQuery = {}) {
       return client.request<AfterSaleListResult>(withQuery('/api/after-sales', query));
+    },
+
+    fetchAfterSaleSummary(query: UserAfterSaleSummaryQuery = {}) {
+      return client.request<AfterSaleSummary>(withQuery('/api/after-sales/summary', query));
     },
 
     fetchAfterSaleDetail(id: string) {

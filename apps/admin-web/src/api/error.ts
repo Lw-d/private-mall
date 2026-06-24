@@ -1,6 +1,11 @@
-import { getApiErrorMessage } from '@mall/api-sdk';
-import { message } from 'antd';
+import { ApiClientError, getApiErrorMessage } from '@mall/api-sdk';
+
+import { appMessage } from '../utils/appMessage';
 
 export function showApiError(error: unknown, fallback: string) {
-  message.error(getApiErrorMessage(error, fallback));
+  if (error instanceof ApiClientError && error.status === 401) {
+    return;
+  }
+
+  appMessage.error(getApiErrorMessage(error, fallback));
 }

@@ -66,7 +66,7 @@ export class AuthService {
         user,
       };
     } catch {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new UnauthorizedException('刷新令牌无效或已过期，请重新登录');
     }
   }
 

@@ -162,6 +162,19 @@ export class CartService {
     return this.findCart(userId);
   }
 
+  async removeCheckedCartItems(userId: string) {
+    const items = await this.getStoredItems(userId);
+    const nextItems = items.filter((item) => !item.checked);
+
+    await this.saveStoredItems(userId, nextItems);
+    return this.findCart(userId);
+  }
+
+  async clearCart(userId: string) {
+    await this.saveStoredItems(userId, []);
+    return this.findCart(userId);
+  }
+
   async getCheckedItems(userId: string): Promise<CheckedCartItem[]> {
     const items = await this.getStoredItems(userId);
     return items

@@ -8,6 +8,8 @@ import {
   type DataApiRequestOptions,
 } from '@mall/api-sdk';
 import type {
+  AfterSaleStatus,
+  AfterSaleSummary,
   Order,
   PointLedger,
   PointRedeemRules,
@@ -162,15 +164,35 @@ function stringify(value: unknown) {
   return JSON.stringify(value);
 }
 
+function getAfterSaleStatusCount(summary: AfterSaleSummary, status: AfterSaleStatus) {
+  return summary.statusCounts.find((item) => item.status === status)?.count ?? 0;
+}
+
+async function assertAfterSaleOrderSummary(orderId: string, expectedStatus: AfterSaleStatus) {
+  const summary = await miniappApi.fetchAfterSaleSummary({ orderId });
+
+  assert(summary.total === 1, 'After-sale summary should include one order-level request.');
+  assert(
+    getAfterSaleStatusCount(summary, expectedStatus) === 1,
+    `After-sale summary should count ${expectedStatus}.`,
+  );
+  assert(
+    summary.statusCounts.every((item) => item.status === expectedStatus || item.count === 0),
+    'After-sale summary should not count unrelated statuses for the smoke order.',
+  );
+
+  return summary;
+}
+
 async function checkHealth() {
   const response = await fetch(joinUrl(apiBaseUrl, '/api/health'));
   unwrapApiResponse<unknown>(await readJson(response), response.status);
   step(`API health ok: ${apiBaseUrl}`);
 }
 
-async function checkSwaggerOrderPagination() {
+async function checkSwaggerContracts() {
   if (shouldSkipSwaggerCheck) {
-    step('swagger order pagination check skipped');
+    step('swagger contract check skipped');
     return;
   }
 
@@ -181,29 +203,62 @@ async function checkSwaggerOrderPagination() {
   const paths = asRecord(document.paths);
   const ordersPath = asRecord(paths['/api/orders']);
   const getOrders = asRecord(ordersPath.get);
+  const afterSaleSummaryPath = asRecord(paths['/api/after-sales/summary']);
+  const getAfterSaleSummary = asRecord(afterSaleSummaryPath.get);
   const schemas = asRecord(asRecord(document.components).schemas);
   const orderListSchema = asRecord(schemas.OrderListResultDto);
   const orderListProperties = asRecord(orderListSchema.properties);
-  const parameters = Array.isArray(getOrders.parameters) ? getOrders.parameters : [];
-  const responseSchemaText = stringify(asRecord(asRecord(getOrders.responses)['200']).content);
+  const afterSaleSummarySchema = asRecord(schemas.AfterSaleSummaryResponseDto);
+  const afterSaleSummaryProperties = asRecord(afterSaleSummarySchema.properties);
+  const afterSaleStatusCountSchema = asRecord(schemas.AfterSaleStatusCountDto);
+  const afterSaleStatusCountProperties = asRecord(afterSaleStatusCountSchema.properties);
+  const orderParameters = Array.isArray(getOrders.parameters) ? getOrders.parameters : [];
+  const afterSaleSummaryParameters = Array.isArray(getAfterSaleSummary.parameters)
+    ? getAfterSaleSummary.parameters
+    : [];
+  const orderResponseSchemaText = stringify(asRecord(asRecord(getOrders.responses)['200']).content);
+  const afterSaleSummaryResponseSchemaText = stringify(
+    asRecord(asRecord(getAfterSaleSummary.responses)['200']).content,
+  );
 
   assert(orderListProperties.items, 'OrderListResultDto should document items.');
   assert(orderListProperties.total, 'OrderListResultDto should document total.');
   assert(orderListProperties.page, 'OrderListResultDto should document page.');
   assert(orderListProperties.pageSize, 'OrderListResultDto should document pageSize.');
   assert(
-    parameters.some((item) => asRecord(item).name === 'page'),
+    orderParameters.some((item) => asRecord(item).name === 'page'),
     'GET /api/orders should document page query parameter.',
   );
   assert(
-    parameters.some((item) => asRecord(item).name === 'pageSize'),
+    orderParameters.some((item) => asRecord(item).name === 'pageSize'),
     'GET /api/orders should document pageSize query parameter.',
   );
   assert(
-    responseSchemaText.includes('OrderListResultDto'),
+    orderResponseSchemaText.includes('OrderListResultDto'),
     'GET /api/orders response should reference OrderListResultDto.',
   );
-  step('swagger order pagination ok');
+
+  assert(afterSaleSummaryProperties.total, 'AfterSaleSummaryResponseDto should document total.');
+  assert(
+    afterSaleSummaryProperties.statusCounts,
+    'AfterSaleSummaryResponseDto should document statusCounts.',
+  );
+  assert(afterSaleStatusCountProperties.status, 'AfterSaleStatusCountDto should document status.');
+  assert(afterSaleStatusCountProperties.count, 'AfterSaleStatusCountDto should document count.');
+  assert(
+    afterSaleSummaryParameters.some((item) => asRecord(item).name === 'orderId'),
+    'GET /api/after-sales/summary should document orderId query parameter.',
+  );
+  assert(
+    afterSaleSummaryParameters.some((item) => asRecord(item).name === 'type'),
+    'GET /api/after-sales/summary should document type query parameter.',
+  );
+  assert(
+    afterSaleSummaryResponseSchemaText.includes('AfterSaleSummaryResponseDto'),
+    'GET /api/after-sales/summary response should reference AfterSaleSummaryResponseDto.',
+  );
+
+  step('swagger contract ok');
 }
 
 async function cleanupCart() {
@@ -371,6 +426,109 @@ async function assertUserCouponStatus(userCouponId: string, status: UserCoupon['
   return userCoupon;
 }
 
+async function exerciseRefundOnlyAfterSale(product: Product, skuId: string, address: UserAddress) {
+  const cartAfterAdd = await miniappApi.addCartItem({
+    skuId,
+    quantity: 1,
+    checked: true,
+  });
+  assert(
+    cartAfterAdd.items.some((item) => item.skuId === skuId && item.checked),
+    'After-sale smoke cart item should be checked.',
+  );
+
+  const order = await miniappApi.createOrderFromCart({
+    shippingAddressId: address.id,
+    remark: `Smoke after-sale ${new Date().toISOString()}`,
+  });
+  createdOrderId = order.id;
+  assert(order.status === 'PENDING_PAYMENT', 'After-sale smoke order should be pending payment.');
+  assert(
+    order.items.some((item) => item.skuId === skuId),
+    'After-sale smoke order item mismatch.',
+  );
+
+  const prepay = await miniappApi.createWechatPrepay(order.id);
+  assert(prepay.payment.status === 'PENDING', 'After-sale smoke prepay should be pending.');
+
+  const transactionId = `SMOKE_AFTER_SALE_TX_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  const notify = await miniappApi.mockWechatPayNotify({
+    orderId: order.id,
+    orderNo: order.orderNo,
+    transactionId,
+    amount: Number(order.payableAmount),
+    tradeState: 'SUCCESS',
+  });
+  assert(notify.received, 'After-sale smoke payment notify should be received.');
+
+  const paidOrder = await miniappApi.fetchOrderDetail(order.id);
+  assert(
+    paidOrder.status === 'PENDING_DELIVERY',
+    'After-sale smoke paid order should be pending delivery.',
+  );
+
+  const afterSale = await miniappApi.createAfterSale({
+    orderId: order.id,
+    type: 'REFUND_ONLY',
+    reason: 'Smoke after-sale refund only',
+    description: `Smoke after-sale for ${product.name}`,
+    requestedAmount: Number(order.payableAmount),
+  });
+  assert(afterSale.status === 'REQUESTED', 'After-sale request should be REQUESTED.');
+  assert(afterSale.orderId === order.id, 'After-sale request orderId mismatch.');
+  await assertAfterSaleOrderSummary(order.id, 'REQUESTED');
+
+  const approvedAfterSale = await adminApi.approveAfterSale(afterSale.id, {
+    approvedAmount: Number(order.payableAmount),
+    merchantRemark: 'Smoke approve refund only',
+  });
+  assert(approvedAfterSale.status === 'APPROVED', 'Refund-only after-sale should become APPROVED.');
+  assert(
+    toAmount(approvedAfterSale.approvedAmount ?? 0) === toAmount(order.payableAmount),
+    'Approved after-sale amount mismatch.',
+  );
+  await assertAfterSaleOrderSummary(order.id, 'APPROVED');
+
+  const refundingAfterSale = await adminApi.triggerAfterSaleRefund(afterSale.id);
+  assert(refundingAfterSale.status === 'REFUNDING', 'After-sale should become REFUNDING.');
+  assert(refundingAfterSale.refund, 'After-sale should include refund snapshot after trigger.');
+  assert(
+    refundingAfterSale.refund?.status === 'PENDING',
+    'After-sale refund should be pending after trigger.',
+  );
+  await assertAfterSaleOrderSummary(order.id, 'REFUNDING');
+
+  const refundTransactionId = `SMOKE_AFTER_SALE_REFUND_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  const refundNotify = await miniappApi.mockWechatRefundNotify({
+    refundNo: refundingAfterSale.refund.refundNo,
+    transactionId: refundTransactionId,
+    amount: Number(refundingAfterSale.refund.amount),
+    refundStatus: 'SUCCESS',
+  });
+  assert(refundNotify.received, 'After-sale refund notify should be received.');
+  assert(refundNotify.refund?.status === 'SUCCESS', 'After-sale refund should become SUCCESS.');
+
+  const completedAfterSale = await miniappApi.fetchAfterSaleDetail(afterSale.id);
+  assert(completedAfterSale.status === 'COMPLETED', 'After-sale should become COMPLETED.');
+  assert(completedAfterSale.completedAt, 'Completed after-sale should have completedAt.');
+  assert(
+    completedAfterSale.logs?.some((item) => item.action === 'REFUND_SUCCESS'),
+    'Completed after-sale should include refund success log.',
+  );
+
+  const refundedOrder = await miniappApi.fetchOrderDetail(order.id);
+  assert(refundedOrder.status === 'REFUNDED', 'After-sale smoke order should become REFUNDED.');
+  await assertAfterSaleOrderSummary(order.id, 'COMPLETED');
+  step('after-sale summary status counts ok');
+  step(`after-sale refund-only smoke ok: ${completedAfterSale.afterSaleNo}`);
+
+  createdOrderId = undefined;
+}
+
 async function cancelPendingOrder() {
   if (!createdOrderId || !miniappAccessToken) {
     return;
@@ -392,7 +550,7 @@ async function run() {
   console.log(`Smoke transaction started against ${apiBaseUrl}`);
 
   await checkHealth();
-  await checkSwaggerOrderPagination();
+  await checkSwaggerContracts();
 
   const loginResult = await miniappApi.wxLogin({
     code: 'smoke-code',
@@ -570,6 +728,28 @@ async function run() {
   );
   step('auto logistics trace ok');
 
+  const refreshedLogisticsOrder = await adminApi.refreshOrderLogisticsTraces(order.id);
+  const refreshedLogisticsTraceCount = refreshedLogisticsOrder.logisticsTraces?.length ?? 0;
+  assert(
+    refreshedLogisticsOrder.logisticsTraces?.some(
+      (trace) => trace.trackingNo === smokeTrackingNo && trace.status === 'PICKED_UP',
+    ),
+    'Refreshed logistics traces should include mock picked-up trace.',
+  );
+  assert(
+    refreshedLogisticsOrder.logisticsTraces?.some(
+      (trace) => trace.trackingNo === smokeTrackingNo && trace.status === 'IN_TRANSIT',
+    ),
+    'Refreshed logistics traces should include mock in-transit trace.',
+  );
+
+  const idempotentLogisticsOrder = await adminApi.refreshOrderLogisticsTraces(order.id);
+  assert(
+    (idempotentLogisticsOrder.logisticsTraces?.length ?? 0) === refreshedLogisticsTraceCount,
+    'Repeated logistics refresh should not create duplicate traces.',
+  );
+  step('mock logistics refresh ok');
+
   const manualTraceContent = `Smoke 手动轨迹 ${Date.now()}`;
   const tracedOrder = await adminApi.addOrderLogisticsTrace(order.id, {
     status: 'IN_TRANSIT',
@@ -668,6 +848,8 @@ async function run() {
     'User completed order page should include smoke order.',
   );
   step(`user order pagination ok: total ${completedOrders.total}`);
+
+  await exerciseRefundOnlyAfterSale(smokeProduct.product, smokeProduct.sku.id, defaultAddress);
 
   const payableAmount = Number(order.payableAmount);
   const partialRefundAmount = Number((payableAmount / 2).toFixed(2));

@@ -643,6 +643,83 @@ Prisma Schema
 
 ## 12. 风险和控制点
 
+## 后续专项任务：图片 / 文件存储改造
+
+背景：
+
+- 当前商品图片和上传图片默认写入后端本地目录 `apps/server/uploads`。
+- 本地目录适合开发和 MVP 验证，但生产环境长期运行会带来磁盘膨胀、容器重建丢失、多实例文件不同步、CDN 缓存困难等问题。
+- 数据库当前保存的是图片 URL，具备平滑迁移到文件服务器 / 对象存储的基础。
+
+建议拆分：
+
+### PX-Storage-01：抽象上传存储层
+
+目标：
+
+```text
+把上传模块从“直接写本地磁盘”改成 StorageService 抽象，先保留 local 实现。
+```
+
+任务：
+
+- 新增 `StorageService` 接口，统一 `upload`、`delete`、`getPublicUrl` 等能力。
+- 将现有 `UploadService` 中的本地写文件逻辑迁移为 `LocalStorageProvider`。
+- 通过环境变量选择存储驱动，例如 `UPLOAD_STORAGE=local`。
+- 保持现有 `/api/admin/uploads/images` 响应结构不变，避免影响管理后台商品表单。
+
+验收：
+
+- 本地上传图片仍可写入 `UPLOAD_LOCAL_DIR`。
+- 商品图片 URL 保存逻辑不变。
+- `pnpm --filter @mall/server typecheck` 和服务端构建通过。
+
+### PX-Storage-02：接入对象存储 / 文件服务器
+
+目标：
+
+```text
+支持把新上传图片保存到对象存储或独立文件服务器，后端不再依赖本地 uploads 目录承载生产图片。
+```
+
+任务：
+
+- 优先选择一个实现：腾讯云 COS、阿里云 OSS、S3 或 MinIO。
+- 新增对应 `StorageProvider`，通过 `UPLOAD_STORAGE=cos|oss|s3|minio` 切换。
+- 支持返回公网 URL 或 CDN URL。
+- 将生产预检脚本中的上传存储检查与实际实现对齐。
+- 补充环境变量说明和部署文档。
+
+验收：
+
+- 管理后台上传图片后，数据库保存远程 URL。
+- 小程序商品列表、详情、首页轮播图均可正常展示远程图片。
+- 后端重启、容器重建不影响已上传图片访问。
+
+### PX-Storage-03：历史图片迁移
+
+目标：
+
+```text
+把既有 /uploads/... 图片迁移到对象存储，并更新数据库 URL。
+```
+
+任务：
+
+- 编写一次性迁移脚本：
+  - 扫描 `ProductImage.url`、售后凭证图片等图片 URL 字段。
+  - 识别 `/uploads/...` 本地路径。
+  - 上传到对象存储。
+  - 更新数据库 URL。
+- 支持 dry-run，输出迁移清单和失败项。
+- 迁移完成后保留本地 uploads 备份一段时间。
+
+验收：
+
+- 迁移脚本可重复安全运行。
+- 迁移后商品、轮播图、售后凭证图片可正常访问。
+- 新上传图片不再进入后端本地 uploads 目录。
+
 ### 支付风险
 
 控制点：

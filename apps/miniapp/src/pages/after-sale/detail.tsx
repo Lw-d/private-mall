@@ -1,4 +1,4 @@
-import { Button, Input, Text, View } from '@tarojs/components';
+import { Button, Image, Input, Text, View } from '@tarojs/components';
 import Taro, { useDidShow, useRouter } from '@tarojs/taro';
 import { useState } from 'react';
 
@@ -14,6 +14,7 @@ import {
 } from '../../api/types';
 import { PageShell } from '../../components/PageShell';
 import { useSessionStore } from '../../store/sessionStore';
+import { emitAfterSaleListUpdate } from './events';
 import './detail.css';
 
 const afterSaleStatusLabelMap: Record<AfterSaleStatus, string> = {
@@ -110,10 +111,18 @@ function canCancel(afterSale: AfterSale) {
   return afterSale.status === 'REQUESTED' || afterSale.status === 'WAIT_BUYER_RETURN';
 }
 
+function previewEvidenceImage(url: string, urls: string[]) {
+  void Taro.previewImage({
+    current: url,
+    urls,
+  });
+}
+
 export default function AfterSaleDetailPage() {
   const router = useRouter();
   const accessToken = useSessionStore((state) => state.accessToken);
   const afterSaleId = router.params.id;
+  const fromList = router.params.from === 'list';
   const [afterSale, setAfterSale] = useState<AfterSale>();
   const [loading, setLoading] = useState(false);
   const [operating, setOperating] = useState(false);
@@ -161,6 +170,7 @@ export default function AfterSaleDetailPage() {
     try {
       const nextAfterSale = await cancelAfterSale(afterSale.id);
       setAfterSale(nextAfterSale);
+      emitAfterSaleListUpdate(nextAfterSale);
       void Taro.showToast({ title: '售后已取消', icon: 'success' });
     } catch (error) {
       showApiError(error, '取消售后失败');
@@ -189,6 +199,7 @@ export default function AfterSaleDetailPage() {
     try {
       const nextAfterSale = await submitReturnLogistics(afterSale.id, input);
       setAfterSale(nextAfterSale);
+      emitAfterSaleListUpdate(nextAfterSale);
       setReturnLogisticsCompany('');
       setReturnTrackingNo('');
       setReturnRemark('');
@@ -351,6 +362,25 @@ export default function AfterSaleDetailPage() {
               <Text className="after-sale-info-value">{afterSale.description}</Text>
             </View>
           ) : null}
+          {afterSale.evidenceImageUrls?.length ? (
+            <View className="after-sale-evidence-block">
+              <Text className="after-sale-info-label">凭证图片</Text>
+              <View className="after-sale-evidence-list">
+                {afterSale.evidenceImageUrls.map((url, index) => (
+                  <View
+                    className="after-sale-evidence-item"
+                    key={`${url}-${index}`}
+                    onClick={() =>
+                      previewEvidenceImage(url, afterSale.evidenceImageUrls?.filter(Boolean) ?? [])
+                    }
+                  >
+                    <Image className="after-sale-evidence-image" mode="aspectFill" src={url} />
+                    <Text className="after-sale-evidence-index">{index + 1}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
           {afterSale.approvedAmount ? (
             <View className="after-sale-info-row">
               <Text className="after-sale-info-label">通过金额</Text>
@@ -461,12 +491,20 @@ export default function AfterSaleDetailPage() {
           <Button
             className="after-sale-back-button"
             onClick={() =>
+              fromList ? Taro.navigateBack() : Taro.redirectTo({ url: '/pages/after-sale/list' })
+            }
+          >
+            售后记录
+          </Button>
+          <Button
+            className="after-sale-order-button"
+            onClick={() =>
               afterSale.orderId
                 ? Taro.redirectTo({ url: `/pages/order/detail?id=${afterSale.orderId}` })
                 : Taro.navigateBack()
             }
           >
-            返回订单详情
+            订单详情
           </Button>
         </View>
       </View>
